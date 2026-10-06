@@ -1,0 +1,114 @@
+[
+  {
+    "repo": "max-messenger/max-bot-api-client-ts",
+    "commit": "d6d330b5915236055856ca382380be7cbf9517c5",
+    "path": "package.json",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-bot-api-client-ts/d6d330b5915236055856ca382380be7cbf9517c5/package.json",
+    "lines": 69
+  },
+  {
+    "repo": "max-messenger/max-bot-api-client-ts",
+    "commit": "d6d330b5915236055856ca382380be7cbf9517c5",
+    "path": "src/core/network/api/client.ts",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-bot-api-client-ts/d6d330b5915236055856ca382380be7cbf9517c5/src/core/network/api/client.ts",
+    "lines": 144
+  },
+  {
+    "repo": "max-messenger/max-bot-api-client-ts",
+    "commit": "d6d330b5915236055856ca382380be7cbf9517c5",
+    "path": "src/core/network/webhook.ts",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-bot-api-client-ts/d6d330b5915236055856ca382380be7cbf9517c5/src/core/network/webhook.ts",
+    "lines": 179
+  },
+  {
+    "repo": "max-messenger/max-bot-api-client-ts",
+    "commit": "d6d330b5915236055856ca382380be7cbf9517c5",
+    "path": "src/core/keyed-executor.ts",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-bot-api-client-ts/d6d330b5915236055856ca382380be7cbf9517c5/src/core/keyed-executor.ts",
+    "lines": 26
+  },
+  {
+    "repo": "max-messenger/max-botapi-python",
+    "commit": "4a286baa06d38f2db9f7244d94f89508743f8fee",
+    "path": "maxapi/connection/base.py",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-botapi-python/4a286baa06d38f2db9f7244d94f89508743f8fee/maxapi/connection/base.py",
+    "lines": 229
+  },
+  {
+    "repo": "max-messenger/max-botapi-python",
+    "commit": "4a286baa06d38f2db9f7244d94f89508743f8fee",
+    "path": "maxapi/bot.py",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-botapi-python/4a286baa06d38f2db9f7244d94f89508743f8fee/maxapi/bot.py",
+    "lines": 879
+  },
+  {
+    "repo": "max-messenger/max-botapi-python",
+    "commit": "4a286baa06d38f2db9f7244d94f89508743f8fee",
+    "path": "examples/webhook/high_level.py",
+    "url": "https://raw.githubusercontent.com/max-messenger/max-botapi-python/4a286baa06d38f2db9f7244d94f89508743f8fee/examples/webhook/high_level.py",
+    "lines": 29
+  },
+  {
+    "repo": "yshuvaev/max_bot",
+    "commit": "05b0855b85e1464ce454281d3f25cc88944f22b1",
+    "path": "src/index.js",
+    "url": "https://raw.githubusercontent.com/yshuvaev/max_bot/05b0855b85e1464ce454281d3f25cc88944f22b1/src/index.js",
+    "lines": 2523
+  },
+  {
+    "repo": "yshuvaev/max_bot",
+    "commit": "05b0855b85e1464ce454281d3f25cc88944f22b1",
+    "path": "src/admin/settings.js",
+    "url": "https://raw.githubusercontent.com/yshuvaev/max_bot/05b0855b85e1464ce454281d3f25cc88944f22b1/src/admin/settings.js",
+    "lines": 142
+  },
+  {
+    "repo": "yshuvaev/max_bot",
+    "commit": "05b0855b85e1464ce454281d3f25cc88944f22b1",
+    "path": "scripts/bridge-init.js",
+    "url": "https://raw.githubusercontent.com/yshuvaev/max_bot/05b0855b85e1464ce454281d3f25cc88944f22b1/scripts/bridge-init.js",
+    "lines": 348
+  },
+  {
+    "repo": "obodnikov/telegram-rss-news-bot",
+    "commit": "19347e9ceb94c7e94244522419f36567a606e7e9",
+    "path": "telegram_rss_bot_enhanced.py",
+    "url": "https://raw.githubusercontent.com/obodnikov/telegram-rss-news-bot/19347e9ceb94c7e94244522419f36567a606e7e9/telegram_rss_bot_enhanced.py",
+    "lines": 790
+  },
+  {
+    "repo": "obodnikov/telegram-rss-news-bot",
+    "commit": "19347e9ceb94c7e94244522419f36567a606e7e9",
+    "path": "config.py",
+    "url": "https://raw.githubusercontent.com/obodnikov/telegram-rss-news-bot/19347e9ceb94c7e94244522419f36567a606e7e9/config.py",
+    "lines": 89
+  },
+  {
+    "repo": "Rongronggg9/RSS-to-Telegram-Bot",
+    "commit": "490b841820e67fc07dabef68dd453fc51e7d8592",
+    "path": "src/web/feed.py",
+    "url": "https://raw.githubusercontent.com/Rongronggg9/RSS-to-Telegram-Bot/490b841820e67fc07dabef68dd453fc51e7d8592/src/web/feed.py",
+    "lines": 103
+  },
+  {
+    "repo": "Rongronggg9/RSS-to-Telegram-Bot",
+    "commit": "490b841820e67fc07dabef68dd453fc51e7d8592",
+    "path": "src/db/models.py",
+    "url": "https://raw.githubusercontent.com/Rongronggg9/RSS-to-Telegram-Bot/490b841820e67fc07dabef68dd453fc51e7d8592/src/db/models.py",
+    "lines": 229
+  },
+  {
+    "repo": "different-ai/opencode-scheduler",
+    "commit": "cd0b62364792f53e8687db53bc2c2c0261c9cf17",
+    "path": "src/index.ts",
+    "url": "https://raw.githubusercontent.com/different-ai/opencode-scheduler/cd0b62364792f53e8687db53bc2c2c0261c9cf17/src/index.ts",
+    "lines": 3316
+  },
+  {
+    "repo": "different-ai/opencode-scheduler",
+    "commit": "cd0b62364792f53e8687db53bc2c2c0261c9cf17",
+    "path": "package.json",
+    "url": "https://raw.githubusercontent.com/different-ai/opencode-scheduler/cd0b62364792f53e8687db53bc2c2c0261c9cf17/package.json",
+    "lines": 57
+  }
+]

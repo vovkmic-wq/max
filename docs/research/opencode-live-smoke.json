@@ -1,0 +1,1 @@
+{"runtime_version": "2.0.17", "model": "proxmox/qwen35-4b", "probe": {"state": "available", "live_verified": false, "required_version": "2.0.17", "reported_version": "2.0.17"}, "generation_ok": false, "code": "OPENCODE_PROVIDER_UNAVAILABLE"}

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools==84.0.0", "wheel==0.48.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "max-channel-agent"
+version = "0.1.0"
+description = "Portable OpenCode editorial agent for MAX channels"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "sqlalchemy>=2.0,<2.1",
+  "psycopg[binary]>=3.2,<4", "httpx>=0.28,<1", "jsonschema>=4.23,<5",
+  "beautifulsoup4>=4.13,<5", "feedparser>=6.0,<7", "tzdata>=2025.1",
+  "cryptography>=44,<50", "alembic>=1.15,<2", "imageio-ffmpeg>=0.6,<1"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<10", "pytest-cov>=6,<8", "ruff>=0.11,<1", "build>=1.2,<2"]
+
+[project.scripts]
+max-agent = "max_channel_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+max_channel_agent = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "S"]
+ignore = ["S101", "S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/max_channel_agent/api.py" = ["B008"]
+"tests/*" = ["S105", "S106"]

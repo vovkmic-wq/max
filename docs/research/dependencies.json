@@ -1,0 +1,68 @@
+[
+  {
+    "name": "fastapi",
+    "version": "0.142.2",
+    "license_expression": "MIT",
+    "license": null
+  },
+  {
+    "name": "uvicorn",
+    "version": "0.54.0",
+    "license_expression": "BSD-3-Clause",
+    "license": null
+  },
+  {
+    "name": "sqlalchemy",
+    "version": "2.0.54",
+    "license_expression": null,
+    "license": "MIT"
+  },
+  {
+    "name": "psycopg",
+    "version": "3.3.6",
+    "license_expression": "LGPL-3.0-only",
+    "license": null
+  },
+  {
+    "name": "httpx",
+    "version": "0.28.1",
+    "license_expression": null,
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "jsonschema",
+    "version": "4.26.0",
+    "license_expression": "MIT",
+    "license": null
+  },
+  {
+    "name": "beautifulsoup4",
+    "version": "4.15.0",
+    "license_expression": null,
+    "license": "MIT License"
+  },
+  {
+    "name": "feedparser",
+    "version": "6.0.14",
+    "license_expression": null,
+    "license": "BSD-2-Clause"
+  },
+  {
+    "name": "cryptography",
+    "version": "49.0.0",
+    "license_expression": "Apache-2.0 OR BSD-3-Clause",
+    "license": null
+  },
+  {
+    "name": "alembic",
+    "version": "1.20.0",
+    "license_expression": "MIT",
+    "license": null
+  },
+  {
+    "name": "imageio-ffmpeg",
+    "version": "0.6.0",
+    "license_expression": null,
+    "license": "BSD-2-Clause"
+  }
+]
