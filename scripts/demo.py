@@ -18,10 +18,10 @@ for folder in ("schemas", "prompts"):
     shutil.copytree(root / folder, demo / folder, dirs_exist_ok=True)
 (demo / "config").mkdir(exist_ok=True)
 shutil.copyfile(root / "TOPIC.md", demo / "TOPIC.md")
-app = json.loads((root / "config/app.example.json").read_text())
+app = json.loads((root / "config/app.example.json").read_text(encoding="utf-8-sig"))
 app["opencode"]["adapter_mode"] = "fake"
 (demo / "config/app.json").write_text(json.dumps(app))
-sources = json.loads((root / "config/sources.example.json").read_text())
+sources = json.loads((root / "config/sources.example.json").read_text(encoding="utf-8-sig"))
 source = sources["sources"][0]
 source["enabled"] = True
 source["rights"].update(

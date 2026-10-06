@@ -20,7 +20,7 @@ def translation_gate(original, translated):
     # Negation and semantic alignment require editorial review in addition to this numerical gate.
 
 
-def validate_draft(value, materials, channel, model_verified=False):
+def validate_draft(value, materials, channel, model_verified=False, allow_original=False):
     required = {
         "title",
         "body",
@@ -45,7 +45,7 @@ def validate_draft(value, materials, channel, model_verified=False):
     ids = {m["id"]: m for m in materials}
     if (
         not isinstance(value["source_ids"], list)
-        or not value["source_ids"]
+        or (not value["source_ids"] and not allow_original)
         or not set(value["source_ids"]) <= set(ids)
     ):
         raise AgentError("EDITOR_UNKNOWN_SOURCE")
@@ -58,7 +58,9 @@ def validate_draft(value, materials, channel, model_verified=False):
     if any(term.casefold() in body.casefold() for term in channel["exclude_topics"]):
         reasons.append("EXCLUDED_TOPIC")
     texts = " ".join(m["text"] + " " + m["title"] for m in materials)
-    if not numbers(body) <= numbers(texts + " ".join(m["url"] for m in materials)):
+    if not allow_original and not numbers(body) <= numbers(
+        texts + " ".join(m["url"] for m in materials)
+    ):
         reasons.append("UNSUPPORTED_NUMBER")
     for mid in value["source_ids"]:
         if not ids[mid]["url"] or ids[mid]["url"] not in body:

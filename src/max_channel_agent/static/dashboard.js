@@ -20,6 +20,31 @@ async function refresh() {
     for (const row of rows) {
       const card = document.createElement("article"); card.className = "card";
       const pre = document.createElement("pre"); pre.textContent = JSON.stringify(row, null, 2); card.append(pre);
+      if (tab === "videos") {
+        for (const [name,label] of [["approve-generation","Одобрить генерацию"],["poll","Проверить результат"],["assemble","Собрать ролик"],["cancel","Остановить проект"]]) {
+          const b=document.createElement("button"); b.textContent=label;
+          b.onclick=()=>action(`/api/v1/videos/${row.id}/${name}`, {revision:row.revision,plan_hash:row.plan_hash});card.append(b);
+        }
+        const index=document.createElement("input");index.type="number";index.value="0";index.min="0";card.append(index);
+        const file=document.createElement("input");file.placeholder="data/incoming/scene.mp4";card.append(file);
+        const rights=document.createElement("input");rights.placeholder="Права на сцену";card.append(rights);
+        const b=document.createElement("button");b.textContent="Импортировать готовую сцену";
+        b.onclick=()=>action(`/api/v1/videos/${row.id}/import-scene`,{index:Number(index.value),path:file.value,rights_basis:rights.value});card.append(b);
+      }
+      if (tab === "source-media") {
+        const caption=document.createElement("textarea");caption.placeholder="Русская подпись с подтверждёнными фактами";card.append(caption);
+        const b=document.createElement("button");b.textContent="Подготовить подборку";
+        b.onclick=()=>action("/api/v1/curate",{channel_id:$("channel").value,media_id:row.id,caption:caption.value});card.append(b);
+      }
+      if (tab === "assets") {
+        const b=document.createElement("button");b.textContent="Просмотреть ролик";
+        b.onclick=async()=>{try {
+          const r=await fetch(`/api/v1/assets/${row.id}/preview`,{headers:{Authorization:"Bearer "+token}});
+          if(!r.ok)throw new Error("Нет доступа к видео");
+          const v=document.createElement("video");v.controls=true;v.width=280;v.src=URL.createObjectURL(await r.blob());
+          v.onloadeddata=()=>URL.revokeObjectURL(v.src);card.append(v);b.disabled=true;
+        }catch(e){$("status").textContent=e.message;}};card.append(b);
+      }
       if (tab === "drafts" && row.state !== "published") {
         const path = document.createElement("input"); path.placeholder = "data/incoming/clip.mp4"; card.append(path);
         const rights = document.createElement("input"); rights.placeholder = "Основание права на публикацию ролика"; card.append(rights);
@@ -56,3 +81,5 @@ $("growth").onclick = () => action(channelPath("growth-plan"));
 $("report").onclick = async () => {try { $("result").textContent = JSON.stringify(await api(`/api/v1/reports/${encodeURIComponent($("channel").value)}`), null, 2); } catch(e) {$("result").textContent=e.message;}};
 $("validate").onclick = () => action("/api/v1/config/validate");
 $("activate").onclick = () => action("/api/v1/config/activate");
+$("generate-plan").onclick=()=>action("/api/v1/videos",{channel_id:$("channel").value,idea:$("video-idea").value});
+$("create-plan").onclick=()=>{try{action("/api/v1/videos",{channel_id:$("channel").value,plan:JSON.parse($("video-plan").value)});}catch(e){$("result").textContent="Ошибка JSON сценария";}};

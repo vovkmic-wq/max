@@ -1,8 +1,6 @@
 import json
-import subprocess
 
 import httpx
-import imageio_ffmpeg
 import pytest
 from sqlalchemy import select
 
@@ -15,30 +13,6 @@ from max_channel_agent.network import SafeHTTP
 from conftest import write_topic
 from test_network_collectors import resolver
 from test_workflow import draft
-
-
-@pytest.fixture
-def clip(project):
-    path = project / "fixture.mp4"
-    subprocess.run(
-        [
-            imageio_ffmpeg.get_ffmpeg_exe(),
-            "-y",
-            "-f",
-            "lavfi",
-            "-i",
-            "color=c=blue:s=160x288:d=1",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            str(path),
-        ],
-        capture_output=True,
-        check=True,
-        timeout=30,
-    )
-    return path
 
 
 def test_short_mp4_inspection(project, clip):

@@ -5,7 +5,6 @@ import re
 import shutil
 import subprocess
 
-import httpx
 
 from .config import AgentError, inside
 from .db import now
@@ -42,6 +41,7 @@ def inspect_video(root, relative_path, duration_limit=60, max_bytes=104857600):
         "duration_seconds": duration,
         "bytes": path.stat().st_size,
         "format": "mp4",
+        "has_audio": "Audio:" in output,
     }
 
 
@@ -92,30 +92,3 @@ def attach_video(service, draft_id, relative_path, rights_basis, actor="owner"):
         )
         service.db.audit(session, actor, "attach_video", draft_id, sha256=info["sha256"])
         return {**info, "revision": draft.revision, "content_hash": fingerprint(payload)}
-
-
-class VideoBackend:
-    """Connect to a separately deployed generator with the documented /jobs protocol."""
-
-    def __init__(self, settings, transport=None):
-        self.settings = settings
-        self.options = settings.app.get("video", {})
-        self.client = httpx.Client(trust_env=False, timeout=30, transport=transport)
-
-    def submit(self, scenario):
-        if self.options.get("backend", "disabled") != "http":
-            raise AgentError("VIDEO_BACKEND_NOT_CONNECTED")
-        limit = self.options.get("max_cost_rub", 0)
-        if limit <= 0:
-            raise AgentError("VIDEO_BUDGET_NOT_CONFIGURED")
-        # This adapter returns a proposed job; paid execution requires a reserved external budget.
-        # No provider is silently invoked during project setup or test runs.
-        raise AgentError("VIDEO_PAID_EXECUTION_REQUIRES_CAMPAIGN_RESERVATION")
-
-    def status(self):
-        return {
-            "backend": self.options.get("backend", "disabled"),
-            "generation_enabled": False,
-            "live_verified": False,
-            "ready_video_import": True,
-        }

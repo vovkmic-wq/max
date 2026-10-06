@@ -17,3 +17,4 @@ dist/
 *.zip
 config/app.json
 config/sources.json
+config/comfy/workflow.json

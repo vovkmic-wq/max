@@ -17,6 +17,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "enabled", "type", "name", "endpoint", "external_chat_id", "channel_ids", "language_hint", "trust", "access_ref", "interval_seconds", "lookback_hours", "max_items_per_run", "full_text", "extraction_profile", "rights"],
       "properties": {
+        "purpose": { "enum": ["ideas", "news", "videos", "mixed"] },
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
         "enabled": { "type": "boolean" },
         "type": { "enum": ["rss", "html", "telegram_bot", "max_bot", "telegram_mtproto", "other_messenger"] },

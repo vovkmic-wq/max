@@ -6,10 +6,12 @@
       "id": "example_rss",
       "enabled": false,
       "type": "rss",
-      "name": "Отключённый пример RSS",
+      "name": "РћС‚РєР»СЋС‡С‘РЅРЅС‹Р№ РїСЂРёРјРµСЂ RSS",
       "endpoint": "https://example.org/feed.xml",
       "external_chat_id": null,
-      "channel_ids": ["main"],
+      "channel_ids": [
+        "main"
+      ],
       "language_hint": "auto",
       "trust": "unverified",
       "access_ref": null,
@@ -27,16 +29,19 @@
         "allow_derivative": false,
         "allow_full_repost": false,
         "allow_media": false
-      }
+      },
+      "purpose": "news"
     },
     {
       "id": "example_html",
       "enabled": false,
       "type": "html",
-      "name": "Отключённый пример сайта",
+      "name": "РћС‚РєР»СЋС‡С‘РЅРЅС‹Р№ РїСЂРёРјРµСЂ СЃР°Р№С‚Р°",
       "endpoint": "https://example.org/news",
       "external_chat_id": null,
-      "channel_ids": ["main"],
+      "channel_ids": [
+        "main"
+      ],
       "language_hint": "auto",
       "trust": "unverified",
       "access_ref": null,
@@ -54,16 +59,19 @@
         "allow_derivative": false,
         "allow_full_repost": false,
         "allow_media": false
-      }
+      },
+      "purpose": "ideas"
     },
     {
       "id": "example_telegram",
       "enabled": false,
       "type": "telegram_bot",
-      "name": "Отключённый пример канала Telegram",
+      "name": "РћС‚РєР»СЋС‡С‘РЅРЅС‹Р№ РїСЂРёРјРµСЂ РєР°РЅР°Р»Р° Telegram",
       "endpoint": null,
       "external_chat_id": null,
-      "channel_ids": ["main"],
+      "channel_ids": [
+        "main"
+      ],
       "language_hint": "auto",
       "trust": "unverified",
       "access_ref": "TELEGRAM_BOT_TOKEN",
@@ -81,16 +89,19 @@
         "allow_derivative": false,
         "allow_full_repost": false,
         "allow_media": false
-      }
+      },
+      "purpose": "videos"
     },
     {
       "id": "example_max",
       "enabled": false,
       "type": "max_bot",
-      "name": "Отключённый пример источника MAX",
+      "name": "РћС‚РєР»СЋС‡С‘РЅРЅС‹Р№ РїСЂРёРјРµСЂ РёСЃС‚РѕС‡РЅРёРєР° MAX",
       "endpoint": null,
       "external_chat_id": null,
-      "channel_ids": ["main"],
+      "channel_ids": [
+        "main"
+      ],
       "language_hint": "auto",
       "trust": "unverified",
       "access_ref": "MAX_BOT_TOKEN",
@@ -108,7 +119,8 @@
         "allow_derivative": false,
         "allow_full_repost": false,
         "allow_media": false
-      }
+      },
+      "purpose": "videos"
     }
   ]
 }

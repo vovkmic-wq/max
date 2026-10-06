@@ -22,7 +22,7 @@ def test_cli_doctor_and_tick(project, capsys):
     assert report["database"] == "sqlite" and report["production_accepted"] is False
     # Disable registered fixture source so CLI tick stays purely local.
     path = project / "config/sources.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     data["sources"][0]["enabled"] = False
     path.write_text(json.dumps(data))
     assert main(["--root", str(project), "tick"]) == 0

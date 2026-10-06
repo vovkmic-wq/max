@@ -1,10 +1,12 @@
 import json
 import shutil
+import subprocess
+import imageio_ffmpeg
 from pathlib import Path
 
 import pytest
 
-from max_channel_agent.config import Settings
+from max_channel_agent.config import Settings, read_topic
 from max_channel_agent.db import Database
 from max_channel_agent.service import Service
 
@@ -18,9 +20,9 @@ def project(tmp_path, monkeypatch):
     shutil.copytree(ROOT / "schemas", tmp_path / "schemas")
     shutil.copytree(ROOT / "prompts", tmp_path / "prompts")
     (tmp_path / "config").mkdir()
-    app = json.loads((ROOT / "config/app.example.json").read_text())
+    app = json.loads((ROOT / "config/app.example.json").read_text(encoding="utf-8-sig"))
     (tmp_path / "config/app.json").write_text(json.dumps(app))
-    topic = Settings.load(ROOT).topic
+    topic = read_topic(ROOT)
     topic["channels"][0].update(
         {
             "enabled": True,
@@ -33,7 +35,7 @@ def project(tmp_path, monkeypatch):
         }
     )
     write_topic(tmp_path, topic)
-    sources = json.loads((ROOT / "config/sources.example.json").read_text())
+    sources = json.loads((ROOT / "config/sources.example.json").read_text(encoding="utf-8-sig"))
     source = sources["sources"][0]
     source["enabled"] = True
     source["rights"].update(
@@ -66,3 +68,27 @@ def service(project):
     service.activate()
     yield service
     service.close()
+
+
+@pytest.fixture
+def clip(project):
+    path = project / "fixture.mp4"
+    subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=160x288:d=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(path),
+        ],
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    return path

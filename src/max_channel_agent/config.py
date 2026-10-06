@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -113,6 +114,33 @@ class Settings:
                 raise AgentError("ADAPTER_MODE_INVALID")
         if app["collection"]["deny_private_networks"] is not True:
             raise AgentError("PRIVATE_NETWORKS_MUST_BE_DENIED")
+        video = app.get("video", {})
+        if video.get("backend", "disabled") not in {"disabled", "comfyui"}:
+            raise AgentError("VIDEO_BACKEND_INVALID")
+        for key in ("max_project_cost_rub", "daily_generation_limit_rub", "max_scene_cost_rub"):
+            value = video.get(key, 0)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise AgentError("VIDEO_BUDGET_INVALID")
+        if video.get("workflow_path"):
+            inside(root, video["workflow_path"])
+        for key, default, minimum, maximum in (
+            ("max_duration_seconds", 60, 1, 60),
+            ("max_bytes", 104857600, 1, 262144000),
+            ("generation_fps", 16, 1, 60),
+            ("task_timeout_seconds", 1800, 1, 86400),
+        ):
+            value = video.get(key, default)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not minimum <= value <= maximum
+            ):
+                raise AgentError("VIDEO_LIMIT_INVALID")
         topic = read_topic(root, app["topic_path"])
         sources = read_sources(root, app["sources_path"], topic)
         return cls(root, app, topic, sources)

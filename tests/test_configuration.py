@@ -66,7 +66,7 @@ def test_paths_stay_inside(project, path):
 )
 def test_sources_invalid(project, variant):
     path = project / "config/sources.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     source = data["sources"][0]
     match variant:
         case "unknown_channel":

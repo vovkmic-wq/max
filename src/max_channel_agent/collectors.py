@@ -2,7 +2,7 @@
 
 import calendar
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import feedparser
@@ -20,6 +20,7 @@ class Item:
     url: str
     published_at: float | None = None
     language: str = "auto"
+    media: list = field(default_factory=list)
 
 
 def clean_html(text):
@@ -30,6 +31,7 @@ def clean_html(text):
 
 
 def detect_language(text):
+    text = re.sub(r"https?://\S+", "", text)
     ru = len(re.findall("[а-яА-ЯёЁ]", text))
     latin = len(re.findall("[a-zA-Z]", text))
     return "ru" if ru > latin else "en"
@@ -68,6 +70,11 @@ def collect_web(source, cursor, http, root):
                     canonical_url(link),
                     published,
                     source["language_hint"],
+                    [
+                        {"url": e.get("href", ""), "mime": e.get("type", "")}
+                        for e in entry.get("enclosures", [])
+                        if e.get("type", "").startswith("video/")
+                    ],
                 )
             )
     elif source["type"] == "html":

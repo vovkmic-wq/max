@@ -212,6 +212,54 @@ class Audit(Base):
     at: Mapped[float] = mapped_column(Float, default=now)
 
 
+class VideoProject(Base):
+    __tablename__ = "video_projects"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    channel_id: Mapped[str] = mapped_column(String(64))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    plan: Mapped[dict] = mapped_column(JSON)
+    config_id: Mapped[str] = mapped_column(String(64))
+    approved_hash: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(64), default="planning")
+    draft_id: Mapped[str | None] = mapped_column(String(36), unique=True)
+    error: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class VideoScene(Base):
+    __tablename__ = "video_scenes"
+    __table_args__ = (UniqueConstraint("project_id", "index"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    project_id: Mapped[str] = mapped_column(String(36))
+    index: Mapped[int] = mapped_column(Integer)
+    request_id: Mapped[str] = mapped_column(String(36), default=uid, unique=True)
+    backend_hash: Mapped[str | None] = mapped_column(String(64))
+    remote_id: Mapped[str | None] = mapped_column(String(128))
+    state: Mapped[str] = mapped_column(String(64), default="pending")
+    artifact: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[float | None] = mapped_column(Float)
+
+
+class VideoAsset(Base):
+    __tablename__ = "video_assets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    path: Mapped[str] = mapped_column(Text)
+    frames: Mapped[list] = mapped_column(JSON)
+    quality: Mapped[dict] = mapped_column(JSON)
+    provenance: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class MaterialMedia(Base):
+    __tablename__ = "material_media"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    material_id: Mapped[str] = mapped_column(String(36))
+    url: Mapped[str] = mapped_column(Text)
+    mime: Mapped[str] = mapped_column(String(64))
+
+
 class Database:
     def __init__(self, settings, url=None):
         state = settings.root / settings.app["state_dir"]
@@ -249,8 +297,15 @@ class Database:
         # New database only. Never silently replace an existing running installation.
         from .config import AgentError
 
-        if set(data) != set(Base.metadata.tables):
+        missing = set(Base.metadata.tables) - set(data)
+        if set(data) - set(Base.metadata.tables) or missing - {
+            "video_projects",
+            "video_scenes",
+            "video_assets",
+            "material_media",
+        }:
             raise AgentError("BACKUP_SCHEMA_MISMATCH")
+        data = {name: data.get(name, []) for name in Base.metadata.tables}
         with self.engine.begin() as connection:
             for table in Base.metadata.sorted_tables:
                 if connection.execute(table.select().limit(1)).first():

@@ -28,8 +28,10 @@ from .db import (
     Intent,
     Job,
     Material,
+    MaterialMedia,
     Metric,
     Story,
+    VideoProject,
     now,
     safe_payload,
     serialize,
@@ -49,6 +51,9 @@ class Service:
         )
         self.worker_id = str(uuid.uuid4())
         self.config_error = None
+        from .hybrid import Hybrid
+
+        self.hybrid = Hybrid(self)
 
     def activate(self, settings=None, actor="owner"):
         settings = settings or self.settings
@@ -253,6 +258,15 @@ class Service:
                     ),
                 )
                 session.add(material)
+                session.flush()
+                if source["rights"].get("allow_media"):
+                    for media in item.media[:5]:
+                        validate_url(media["url"], resolve=False)
+                        session.add(
+                            MaterialMedia(
+                                material_id=material.id, url=media["url"], mime=media["mime"]
+                            )
+                        )
                 for channel_id in source["channel_ids"]:
                     if self.settings.channel(channel_id)["enabled"]:
                         self.enqueue(
@@ -489,7 +503,13 @@ class Service:
             candidate = {k: v for k, v in draft.current.items() if k not in {"checks", "video"}}
             candidate["body"] = body
             candidate["checks"] = validate_draft(
-                candidate, materials, self.settings.channel(draft.channel_id)
+                candidate,
+                materials,
+                self.settings.channel(draft.channel_id),
+                allow_original=session.scalar(
+                    select(VideoProject).where(VideoProject.draft_id == draft_id)
+                )
+                is not None,
             )
             if "video" in draft.current:
                 candidate["video"] = draft.current["video"]
@@ -676,6 +696,7 @@ class Service:
 
     def tick(self):
         self.refresh()
+        self.hybrid.tick()
         self.schedule_sources()
         self.process_inbox()
         # Bound work per iteration; retries stop at max_read_attempts.
@@ -812,6 +833,7 @@ class Service:
             return serialize(campaign)
 
     def close(self):
+        self.hybrid.close()
         self.http.close()
         self.editor.client.close()
         self.publisher.close()

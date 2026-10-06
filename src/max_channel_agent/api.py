@@ -23,6 +23,11 @@ from .db import (
     Intent,
     Job,
     Metric,
+    VideoProject,
+    VideoScene,
+    VideoAsset,
+    Material,
+    MaterialMedia,
     serialize,
 )
 
@@ -77,7 +82,7 @@ def create_app(service, run_worker=False):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'"
+            "default-src 'self'; style-src 'self'; script-src 'self'; media-src 'self' blob:; frame-ancestors 'none'"
         )
         return response
 
@@ -148,6 +153,7 @@ def create_app(service, run_worker=False):
             },
             "database": service.db.engine.dialect.name,
             "configuration": service.config_error or "valid",
+            "video": service.hybrid.backend.status(),
         }
 
     @app.get("/api/v1/{collection}", dependencies=[Depends(auth)])
@@ -160,9 +166,15 @@ def create_app(service, run_worker=False):
             "jobs": Job,
             "audit": Audit,
             "campaigns": Campaign,
+            "videos": VideoProject,
+            "materials": Material,
+            "source-media": MaterialMedia,
+            "assets": VideoAsset,
         }
         if collection == "drafts":
             return [{**row, "content_hash": fingerprint(row["current"])} for row in rows(Draft)]
+        if collection == "videos":
+            return [{**row, "plan_hash": fingerprint(row["plan"])} for row in rows(VideoProject)]
         if collection == "channels":
             return [
                 {
@@ -185,6 +197,74 @@ def create_app(service, run_worker=False):
             "hash": candidate.hash,
             "changed": candidate.hash != service.settings.hash,
         }
+
+    @app.post("/api/v1/videos")
+    def create_video(body: dict = Body(), role=Depends(owner)):
+        channel_id = body.get("channel_id", "main")
+        if "idea" in body:
+            return service.hybrid.generate_plan(channel_id, body["idea"], role)
+        return service.hybrid.create(channel_id, body.get("plan"), role)
+
+    @app.get("/api/v1/videos/{project_id}", dependencies=[Depends(auth)])
+    def video_detail(project_id: str):
+        with service.db.session() as session:
+            project = session.get(VideoProject, project_id)
+            if not project:
+                raise AgentError("VIDEO_PROJECT_NOT_FOUND", 404)
+            return {
+                **serialize(project),
+                "plan_hash": fingerprint(project.plan),
+                "scenes": [
+                    serialize(s)
+                    for s in session.scalars(
+                        select(VideoScene)
+                        .where(VideoScene.project_id == project_id)
+                        .order_by(VideoScene.index)
+                    )
+                ],
+            }
+
+    @app.post("/api/v1/videos/{project_id}/{action}")
+    def video_action(project_id: str, action: str, body: dict = Body(), role=Depends(owner)):
+        if action == "approve-generation":
+            service.hybrid.approve_generation(
+                project_id, body.get("revision"), body.get("plan_hash"), role
+            )
+            return {"queued": True}
+        if action == "import-scene":
+            return service.hybrid.import_scene(
+                project_id,
+                body.get("index"),
+                body.get("path", ""),
+                body.get("rights_basis", ""),
+                role,
+            )
+        if action == "assemble":
+            return service.hybrid.assemble(project_id, body.get("revision"), role)
+        if action == "cancel":
+            service.hybrid.cancel(project_id, role)
+            return {"cancelled_locally": True}
+        if action == "poll":
+            service.hybrid.poll_project(project_id)
+            return video_detail(project_id)
+        raise AgentError("NOT_FOUND", 404)
+
+    @app.post("/api/v1/curate")
+    def curate_video(body: dict = Body(), role=Depends(owner)):
+        return service.hybrid.curate(
+            body.get("channel_id", "main"), body.get("media_id"), body.get("caption"), role
+        )
+
+    @app.get("/api/v1/assets/{asset_id}/preview", dependencies=[Depends(auth)])
+    def preview(asset_id: str):
+        from .config import inside
+
+        with service.db.session() as session:
+            asset = session.get(VideoAsset, asset_id)
+            if not asset:
+                raise AgentError("VIDEO_ASSET_NOT_FOUND", 404)
+            path = inside(service.settings.root, asset.path)
+        return FileResponse(path, media_type="video/mp4")
 
     @app.post("/api/v1/config/activate")
     def activate(role=Depends(owner)):
@@ -295,6 +375,10 @@ def create_app(service, run_worker=False):
                     candidate,
                     [m for m in materials if m["story_id"] == draft.story_id],
                     service.settings.channel(draft.channel_id),
+                    allow_original=session.scalar(
+                        select(VideoProject).where(VideoProject.draft_id == draft.id)
+                    )
+                    is not None,
                 )
                 if set(checks) - {"EDITOR_REVIEW_REQUIRED"}:
                     raise AgentError("QUALITY_GATE_BLOCKED")

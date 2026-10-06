@@ -146,6 +146,8 @@ class OpenCode:
                 return {"verified": False, "issues": ["OFFLINE_FIXTURE"]}, {}
             if task_type == "translate":
                 raise AgentError("OFFLINE_TRANSLATION_UNAVAILABLE")
+            if task_type == "video_plan":
+                raise AgentError("OFFLINE_STORYBOARD_UNAVAILABLE")
             if task_type == "bootstrap":
                 return {
                     "name": context["channel"]["name"],
@@ -156,6 +158,7 @@ class OpenCode:
             return {"note": "Локальный план; генерация моделью выключена"}, {}
         instruction = (self.root / "prompts/EDITOR_AGENT_PROMPT.md").read_text(encoding="utf-8")
         output = {
+            "video_plan": '{"title":"Русское название","caption":"Русская подпись без вымышленных фактических утверждений","rights_basis":"Собственные сценарий и материалы; проверка редактором","scenes":[{"prompt":"English visual description and camera motion","negative_prompt":"visual artifacts to avoid","duration_seconds":5}]}',
             "draft": '{"title":"...","body":"...","language":"ru","source_ids":[],"decision":"accept|reject|review","reason_codes":[],"claims":[{"text":"...","material_id":"...","quote":"exact original fragment"}],"confidence":0.8,"payload":{}}',
             "cluster": '{"same_event":true,"reason":"..."}',
             "translate": '{"text":"Russian translation"}',
