@@ -35,7 +35,7 @@ def runtime_files(root):
 def portable_name(name):
     # Восстановление имеет ограниченный набор назначений даже при корректном шифровании.
     return name in {"database.json", "TOPIC.md", "config/sources.json", "config/app.json",
-                    "config/image_sources.json", "config/image_channels.json", "config/comfy/workflow.json"} or name.startswith((
+                    "config/image_sources.json", "config/image_channels.json", "config/holidays.json", "config/comfy/workflow.json"} or name.startswith((
                         "media/", "data/image-ranking/", "data/image-schedule/",
                         "data/browser-publications/", "data/browser-corrections/"))
 
@@ -77,7 +77,7 @@ def backup(service, destination, key):
         ).read_bytes(),
     }
     # Последовательно обрабатываем элементы: ('config/app.json', 'config/image_sources.json', 'config/image_channels.json', 'config/comfy/workflow.json').
-    for name in ("config/app.json", "config/image_sources.json", "config/image_channels.json",
+    for name in ("config/app.json", "config/image_sources.json", "config/image_channels.json", "config/holidays.json",
                  "config/comfy/workflow.json"):
         path = inside(service.settings.root, name)
         # Обрабатываем ветвь при условии: path.exists().
@@ -189,13 +189,16 @@ def restore(service, archive_path, key):
                             app["topic_path"]: content["TOPIC.md"],
                             app["sources_path"]: content["config/sources.json"]}
         validation_files.update({name: value for name, value in content.items()
-                                 if name in {"config/image_sources.json", "config/image_channels.json"}})
+                                 if name in {"config/image_sources.json", "config/image_channels.json", "config/holidays.json"}})
         # Последовательно обрабатываем элементы: validation_files.items().
         for name, value in validation_files.items():
             path = inside(validation_root, name)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(value)
         candidate = Settings.load(validation_root)
+        if "config/holidays.json" in content:
+            from .holidays import catalog
+            catalog(validation_root)
         # Обрабатываем ветвь при условии: 'config/image_sources.json' in content.
         if "config/image_sources.json" in content:
             from .image_pipeline import source_config

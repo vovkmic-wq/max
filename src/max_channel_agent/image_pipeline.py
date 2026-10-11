@@ -376,7 +376,7 @@ def scan(root, cfg=None, http=None, scorer=None, *, all_sources=False, exclude_u
     if missing:
         report = {"state": "needs_source_key", "missing_env_names": sorted(set(missing)),
                   "top": [], "rejected": {}, "checked_at": datetime.now(timezone.utc).isoformat()}
-        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"))
+        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"), holiday_names=cfg.get("holiday_names", []))
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
     scorer = scorer or LocalCLIP(root, cfg.get("local_prompts", PROMPTS))
@@ -509,7 +509,7 @@ def scan(root, cfg=None, http=None, scorer=None, *, all_sources=False, exclude_u
                   "configured_source_count": len(enabled), "source_results": source_results,
                   "all_sources": all_sources, "exclude_used": exclude_used,
                   "download_limit": download_limit}
-        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"))
+        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"), holiday_names=cfg.get("holiday_names", []))
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
     # Обрабатываем AgentError и выбираем допустимый исход.
@@ -524,7 +524,7 @@ def scan(root, cfg=None, http=None, scorer=None, *, all_sources=False, exclude_u
                   "configured_source_count": len(enabled), "source_results": source_results,
                   "accepted_before_error": accepted, "all_sources": all_sources,
                   "exclude_used": exclude_used}
-        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"))
+        report.update(channel_id=channel_id, profile_hash=cfg.get("profile_hash"), holiday_names=cfg.get("holiday_names", []))
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return report
     finally:
@@ -771,10 +771,17 @@ def auto_run(service, *, dry_run=False, at=None, scanner=None, publisher=publish
             return {"state": "already_attempted", "slot": slot}
     # Выполняем операцию с отдельной обработкой возможных ошибок.
     try:
-        report = scanner(root) if scanner else scan(root, exclude_used=True, **({"channel_id": channel_id} if channel_id != "test" else {}))
-        # Обрабатываем ветвь при условии: report['state'] != 'ready'.
+        from .holidays import campaign, search_config
+        holiday = campaign(root, channel_id, clock, reserve=not dry_run, slot=slot)
+        options = {"exclude_used": True, **({"channel_id": channel_id} if channel_id != "test" else {})}
+        if holiday and holiday["holiday_names"]:
+            options["cfg"] = search_config(root, source_config(root, channel_id), holiday)
+        report = scanner(root) if scanner else scan(root, **options)
         if report["state"] != "ready":
             result = {"state": "scan_not_ready", "slot": slot, "scan_state": report["state"]}
+            # Отсутствие подходящих праздничных картинок не блокирует обычные следующие интервалы.
+            if holiday and holiday["holiday_names"] and report["state"] in {"insufficient_candidates", "no_new_image"}:
+                result["state"] = "no_new_image"
         else:
             # Альтернативная ветвь после проверки основного условия.
             row = next((item for item in report["top"]
@@ -795,6 +802,8 @@ def auto_run(service, *, dry_run=False, at=None, scanner=None, publisher=publish
     except AgentError as exc:
         result = {"state": "error", "slot": slot, "code": exc.code}
     # Обрабатываем ветвь при условии: not dry_run.
+    if "holiday" in locals() and holiday:
+        result["holiday_search"] = holiday
     if not dry_run:
         checkpoint.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return result

@@ -137,6 +137,14 @@ class Settings:
         # Обрабатываем ветвь при условии: app.get('schema_version') != '1.0'.
         if app.get("schema_version") != "1.0":
             raise AgentError("APP_VERSION_INVALID")
+        # Адрес и порт панели проверяются до следующего запуска сервера.
+        api = app.get("api", {})
+        if (not isinstance(api.get("host", "127.0.0.1"), str)
+                or not api.get("host", "127.0.0.1")
+                or isinstance(api.get("port", 8080), bool)
+                or not isinstance(api.get("port", 8080), int)
+                or not 1 <= api.get("port", 8080) <= 65535):
+            raise AgentError("API_ADDRESS_INVALID")
         # Последовательно обрабатываем элементы: ('state_dir', 'media_dir', 'logs_dir', 'topic_path', 'sources_path').
         for key in ("state_dir", "media_dir", "logs_dir", "topic_path", "sources_path"):
             inside(root, app[key])

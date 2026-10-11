@@ -110,6 +110,9 @@ def next_slot(channel, occupied, earliest=None):
     # Последовательно обрабатываем элементы: range(31).
     for offset in range(31):
         day = local.date() + timedelta(days=offset)
+        # Учитываем выбранные дни недели при назначении одобренного черновика.
+        if day.weekday() not in policy.get("weekdays", range(7)):
+            continue
         count = sum(datetime.fromtimestamp(t, UTC).astimezone(zone).date() == day for t in occupied)
         # Обрабатываем ветвь при условии: count >= policy['max_posts_per_day'].
         if count >= policy["max_posts_per_day"]:

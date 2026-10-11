@@ -1,33 +1,38 @@
-/* Оформление элементов :root: внешний вид и расположение в панели. */
-:root {font-family:system-ui,sans-serif;color:#e7edf8;background:#111827}
-/* Оформление элементов body: внешний вид и расположение в панели. */
-body {margin:0}
-/* Оформление элементов header,main: внешний вид и расположение в панели. */
-header,main {max-width:1050px;margin:auto;padding:28px}
-/* Оформление элементов header span: внешний вид и расположение в панели. */
-header span {color:#94b6ff}
-/* Оформление элементов h1: внешний вид и расположение в панели. */
-h1 {font-size:36px}
-/* Оформление элементов section: внешний вид и расположение в панели. */
-section {background:#1c273b;border:1px solid #334155;border-radius:14px;padding:22px;margin-bottom:20px}
-/* Оформление элементов nav: внешний вид и расположение в панели. */
-nav {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
-/* Оформление элементов label: внешний вид и расположение в панели. */
-label {display:inline-flex;flex-direction:column;gap:8px;margin:8px}
-/* Оформление элементов input,button,textarea: внешний вид и расположение в панели. */
-input,button,textarea {font:inherit;border-radius:8px;border:1px solid #536582;padding:10px;background:#152037;color:inherit}
-/* Оформление элементов button: внешний вид и расположение в панели. */
-button {cursor:pointer;background:#294e99;margin:5px}
-/* Оформление элементов button:hover: внешний вид и расположение в панели. */
-button:hover {background:#3864bd}
-/* Оформление элементов textarea: внешний вид и расположение в панели. */
-textarea {width:95%;min-height:160px}
-/* Оформление элементов pre: внешний вид и расположение в панели. */
-pre {white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;padding:14px;border-radius:10px}
-/* Оформление элементов .card: внешний вид и расположение в панели. */
-.card {border-top:1px solid #44516a;margin-top:16px;padding-top:12px}
-/* Оформление элементов .badge: внешний вид и расположение в панели. */
-.badge {color:#a8c7ff}
-/* Оформление элементов #status: внешний вид и расположение в панели. */
+/* Основа страницы и карточек: единый контрастный интерфейс для всех разделов. */
+:root {font-family:system-ui,sans-serif;color:#e7edf8;background:#0e1421;color-scheme:dark}
+body {margin:0} header,main {max-width:1320px;margin:auto;padding:24px}
+header span {color:#8ab8ff;letter-spacing:.05em} h1 {font-size:34px;margin-bottom:8px}
+h2 {font-size:22px} h3 {margin-top:28px} p {line-height:1.55}
+section {background:#192335;border:1px solid #334155;border-radius:16px;padding:24px;margin-bottom:22px}
+nav {display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 24px}
+label {display:flex;flex-direction:column;gap:7px;margin:12px 0;min-width:160px}
+input,button,textarea,select {font:inherit;border-radius:8px;border:1px solid #526580;padding:10px;background:#101a2b;color:inherit;box-sizing:border-box}
+button {cursor:pointer;background:#2956a3;margin:4px;padding:10px 16px}
+button:hover:not(:disabled) {background:#386fc4} button:disabled {opacity:.45;cursor:not-allowed}
+button.secondary {background:#243347} nav button.active {background:#527cbd;box-shadow:0 0 0 2px #8bb6f3}
+textarea {width:100%;min-height:170px;line-height:1.5;font-family:ui-monospace,monospace}
+pre {white-space:pre-wrap;overflow-wrap:anywhere;background:#0e1726;padding:16px;border-radius:9px;max-height:430px;overflow:auto}
+.card {border:1px solid #3b4c64;border-radius:12px;margin:12px 0;padding:18px}
+.card pre {max-height:260px}.hint {color:#b4c1d4;font-size:14px} .empty {color:#b4c1d4;padding:18px;border:1px dashed #485975;border-radius:10px}
+.form-row,.button-row,.section-heading,.calendar-toolbar {display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.form-row label {flex:1}.section-heading {justify-content:space-between}.login {display:flex;gap:12px;flex-wrap:wrap;align-items:center}.login label {flex:1;min-width:260px}.login p {width:100%;margin:0}
+.checkbox {display:flex;flex-direction:row;align-items:center;min-width:0}.checkbox input {width:18px;height:18px}
+fieldset {border:1px solid #485975;border-radius:10px;display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.badge {color:#9fc5ff}
+details {margin:14px 0} summary {cursor:pointer;color:#bcd4fb} [hidden] {display:none!important}
+/* Результат любой кнопки виден даже в нижней части страницы. */
+#feedback {position:sticky;top:10px;z-index:20;border:1px solid #415777;border-radius:10px;padding:14px 18px;background:#1b2d48;box-shadow:0 4px 20px #0005}
+#feedback[data-state="error"] {background:#48212a;border-color:#bd586b} #feedback[data-state="success"] {background:#173c32;border-color:#4c9279}
+#feedback[data-state="working"] {background:#263d5d} #feedback[data-state="working"]::before {content:"◌ ";display:inline-block;margin-right:6px}
 #status {color:#a8c7ff}
+/* Семь дней календаря; события внутри дня упорядочены по времени. */
+.calendar-grid {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:18px 0}.calendar-day {border:1px solid #3c4e69;border-radius:10px;min-height:200px;padding:10px;background:#121e31}
+.calendar-day.today {border-color:#80b5ff;background:#1b2c46}.calendar-day h3 {margin:4px 0;font-size:14px}.calendar-date {color:#a8c7ff;font-size:20px;margin-bottom:16px}
+.calendar-event {width:100%;text-align:left;margin:5px 0;padding:9px;background:#28415d;border-left:3px solid #8ab5fb;font-size:13px}.calendar-event[data-state="published"] {background:#1d4238;border-left-color:#65bd9c}
+.calendar-event[data-state="paused"] {background:#293345;border-left-color:#748399;color:#b1bfd0}
+.calendar-event time {display:block;font-weight:bold;margin-bottom:5px}.legend {color:#b8c7dc;font-size:13px}.event-detail {border:1px solid #506886;border-radius:10px;padding:20px}.event-detail img {max-width:100%;max-height:340px;border-radius:9px}
+.schedule-form {border-top:1px solid #405572;padding-top:10px} #credentials-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+@media(max-width:1100px) {.calendar-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:650px) {header,main{padding:14px}section{padding:16px}.calendar-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#credentials-fields{grid-template-columns:1fr}.form-row{display:block}h1{font-size:28px}}
 
+/* Праздничные теги отделены от фактических публикаций и видны в соответствующем дне. */
+.holiday-tag {font-size:11px;color:#ffdb94;background:#43351f;padding:6px;border-radius:6px;margin:5px 0}.calendar-event small{display:block;font-size:10px;color:#e5d3a3;margin-top:5px}

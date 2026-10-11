@@ -26,3 +26,5 @@ config/image_sources.json
 config/comfy/workflow.json
 
 config/image_channels.json
+
+config/holidays.json

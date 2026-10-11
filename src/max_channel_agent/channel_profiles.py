@@ -75,6 +75,8 @@ def image_config(root, catalog, channel_id=None):
     cfg["caption_title"] = profile.get("caption_title", "Иллюстрация из открытой коллекции")
     cfg["timezone"] = topic["publication"]["timezone"]
     cfg["interval_hours"] = profile.get("interval_hours", 4)
+    if "schedule" in profile:
+        cfg["schedule"] = profile["schedule"]
     cfg["profile_explicit"] = explicit
     cfg["profile_hash"] = fingerprint({"topic": topic, "images": cfg})
     return cfg
@@ -95,7 +97,11 @@ def window(root, channel_id="test", at=None):
     cfg = source_config(root, channel_id)
     zone = ZoneInfo(cfg["timezone"])
     current = (at or datetime.now(zone)).astimezone(zone)
-    interval = cfg["interval_hours"]
+    from .calendar_schedule import plan, weekly_window
+    if plan(cfg)["kind"] == "weekly":
+        start, following, slot = weekly_window(cfg, current)
+        return current, start, following, slot, cfg
+    interval = plan(cfg)["interval_hours"]
     start = current.replace(hour=current.hour // interval * interval,
                             minute=0, second=0, microsecond=0)
     following = datetime.fromtimestamp(start.timestamp() + interval * 3600, zone)

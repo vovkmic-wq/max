@@ -115,31 +115,22 @@ def create_app(service, run_worker=False):
                 if len(received) > 1048576:
                     return JSONResponse({"code": "REQUEST_TOO_LARGE"}, status_code=413)
             request._body = bytes(received)
-        response = await call_next(request)
+        # Не передаём транспортные исключения с возможными ключами в текст ответа или лог.
+        try:
+            response = await call_next(request)
+        except Exception:
+            response = JSONResponse({"code": "PANEL_OPERATION_FAILED"}, status_code=500)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; style-src 'self'; script-src 'self'; media-src 'self' blob:; frame-ancestors 'none'"
+            "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' blob:; media-src 'self' blob:; frame-ancestors 'none'"
         )
         return response
 
-    # Проверяем ключ доступа и определяем роль пользователя.
-    def auth(authorization: str | None = Header(default=None)):
-        # Обрабатываем ветвь при условии: not authorization or not authorization.startswith('Bearer ').
-        if not authorization or not authorization.startswith("Bearer "):
-            raise AgentError("AUTH_REQUIRED", 401)
-        supplied = authorization[7:]
-        secrets = {
-            "owner": os.getenv(service.settings.app["api"]["auth_secret_env"], ""),
-            "editor": os.getenv("APP_EDITOR_SECRET", ""),
-            "viewer": os.getenv("APP_VIEWER_SECRET", ""),
-        }
-        # Последовательно обрабатываем элементы: secrets.items().
-        for role, secret in secrets.items():
-            # Обрабатываем ветвь при условии: secret and hmac.compare_digest(secret, supplied).
-            if secret and hmac.compare_digest(secret, supplied):
-                return role
-        raise AgentError("AUTH_INVALID", 401)
+    # Подписанная сессия переживает обновление страницы; ключ в браузере не хранится.
+    def auth(request: Request, authorization: str | None = Header(default=None)):
+        from .panel_auth import authenticate
+        return authenticate(service.settings, request, authorization)
 
     # Проверяем редакторскую роль или выбираем редакторский адаптер.
     def editor(role=Depends(auth)):
@@ -212,6 +203,78 @@ def create_app(service, run_worker=False):
             "configuration": service.config_error or "valid",
             "video": service.hybrid.backend.status(),
         }
+
+    # Начинаем сессию только после проверки предоставленного ключа.
+    @app.post("/api/v1/session/login")
+    def session_login(request: Request, role=Depends(auth)):
+        from .panel_auth import COOKIE, LIFETIME, encode_session
+        response = JSONResponse({"authenticated": True, "role": role})
+        response.set_cookie(COOKIE, encode_session(service.settings, role), max_age=LIFETIME,
+                            httponly=True, samesite="strict", secure=request.url.scheme == "https",
+                            path="/api/v1")
+        return response
+
+    # Проверка входа не возвращает ни ключ, ни значение cookie.
+    @app.get("/api/v1/session")
+    def session_status(role=Depends(auth)):
+        return {"authenticated": True, "role": role}
+
+    # Выход удаляет браузерную сессию, не меняя ключи владельца.
+    @app.post("/api/v1/session/logout")
+    def session_logout(role=Depends(auth)):
+        from .panel_auth import COOKIE
+        response = JSONResponse({"authenticated": False})
+        response.delete_cookie(COOKIE, path="/api/v1")
+        return response
+
+    # Обновление фактических дат выполняется владельцем; блокировки источника не обходятся.
+    @app.post("/api/v1/holidays/update", dependencies=[Depends(owner)])
+    def holidays_update():
+        from .holidays import import_catalog
+        from .image_schedule import lock
+        with lock(service.settings.root, "run"):
+            return import_catalog(service.settings.root)
+
+    # Включение поиска не сбрасывает суточные отметки и не повторяет праздничную попытку.
+    @app.post("/api/v1/holidays/config", dependencies=[Depends(owner)])
+    def holiday_options(body: dict = Body()):
+        from .holidays import catalog, FILE
+        from .channel_profiles import atomic_json
+        from .image_schedule import lock
+        if set(body) != {"enabled"} or not isinstance(body["enabled"], bool):
+            raise AgentError("HOLIDAY_CONFIG_INVALID")
+        with lock(service.settings.root, "run"):
+            value = catalog(service.settings.root)
+            value["enabled"] = body["enabled"]
+            atomic_json(service.settings.root, FILE, value)
+        return {"state": "saved", "enabled": body["enabled"]}
+
+    # Календарь объединяет фактические публикации и будущие окна отправки.
+    @app.get("/api/v1/calendar", dependencies=[Depends(auth)])
+    def panel_calendar(channel_id: str = "test", start: str | None = None):
+        from .panel_calendar import calendar
+        return calendar(service, channel_id, start)
+
+    # Недельные часы изменяет владелец; валидация выполняется до сохранения.
+    @app.post("/api/v1/calendar/{channel_id}/schedule", dependencies=[Depends(owner)])
+    def calendar_schedule(channel_id: str, body: dict = Body()):
+        from .panel_calendar import save_schedule
+        return save_schedule(service, channel_id, body)
+
+    # Все настройки доступны в панели, без выдачи значений локальных ключей.
+    @app.get("/api/v1/settings", dependencies=[Depends(owner)])
+    def panel_settings():
+        from .panel_settings import snapshot
+        return snapshot(service)
+
+    @app.post("/api/v1/settings/{action}", dependencies=[Depends(owner)])
+    def settings_action(action: str, body: dict = Body()):
+        from .panel_settings import save_configuration, save_credentials
+        if action == "credentials":
+            return save_credentials(service, body)
+        if action in {"validate", "save"}:
+            return save_configuration(service, body, validate_only=action == "validate")
+        raise AgentError("NOT_FOUND", 404)
 
     # Возвращаем доступные профили и их состояния.
     @app.get("/api/v1/channel-profiles", dependencies=[Depends(auth)])
@@ -324,8 +387,15 @@ def create_app(service, run_worker=False):
         chat_id = str(body.get("chat_id", ""))
         # Обрабатываем ветвь при условии: action == 'login'.
         if action == "login":
+            # При действующем входе возвращаем понятное подтверждение вместо мигающего окна.
+            try:
+                inspected = service.publisher.inspect(chat_id)
+                if inspected.get("publish"):
+                    return {"state": "already_logged_in", "chat_id": chat_id, "publish": True}
+            except AgentError as exc:
+                if exc.code not in {"BROWSER_LOGIN_OR_CHANNEL_REQUIRED", "BROWSER_CHANNEL_NOT_VISIBLE"}:
+                    raise
             return service.publisher.login(chat_id)
-        # Обрабатываем ветвь при условии: action == 'check'.
         if action == "check":
             return service.publisher.inspect(chat_id)
         raise AgentError("NOT_FOUND", 404)
@@ -462,6 +532,21 @@ def create_app(service, run_worker=False):
     def approve(draft_id: str, body: dict = Body(), role=Depends(editor)):
         service.approve(draft_id, body.get("revision"), body.get("content_hash"), role)
         return {"scheduled": True}
+
+    # Предпросмотр использует проверенный локальный файл, без доступа к чужим каталогам.
+    @app.get("/api/v1/drafts/{draft_id}/image", dependencies=[Depends(auth)])
+    def draft_image(draft_id: str):
+        from .media import inspect_image
+        from .config import inside
+        with service.db.session() as session:
+            draft = session.get(Draft, draft_id)
+            image = draft.current.get("image", {}) if draft else {}
+            if not image:
+                raise AgentError("IMAGE_NOT_FOUND", 404)
+            metadata = inspect_image(service.settings.root, image["path"])
+            if metadata["sha256"] != image["sha256"]:
+                raise AgentError("IMAGE_HASH_CHANGED")
+            return FileResponse(inside(service.settings.root, image["path"]))
 
     # Создаём новую ревизию вместо изменения согласованного содержимого.
     @app.post("/api/v1/drafts/{draft_id}/revise")

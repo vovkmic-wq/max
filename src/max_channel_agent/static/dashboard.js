@@ -1,201 +1,361 @@
 "use strict";
-let token = "", tab = "channels";
+
+// Состояние содержит только роль и настройки интерфейса; ключ не сохраняется в JavaScript.
+const state = {authenticated:false, role:null, tab:"channels", view:"workspace", profiles:[], busy:new Set(), settings:null, section:"app", calendar:null};
 const $ = id => document.getElementById(id);
-// Отправляем авторизованный запрос и проверяем безопасный ответ сервера.
-async function api(path, body) {
-  const response = await fetch(path, {method: body === undefined ? "GET" : "POST",
-    headers: {Authorization: "Bearer " + token, "Content-Type": "application/json"},
-    body: body === undefined ? undefined : JSON.stringify(body)});
-  const value = await response.json();
-  // Проверяем условие перед изменением интерфейса или выполнением действия.
-  if (!response.ok) throw new Error(value.code || "Ошибка запроса");
+const roles = {owner:"владелец",editor:"редактор",viewer:"наблюдатель"};
+const errors = {
+  AUTH_REQUIRED:"Сначала подключитесь к панели с ключом доступа.", AUTH_INVALID:"Ключ неверен или сессия завершена. Подключитесь заново.",
+  SESSION_EXPIRED:"Сессия завершена. Введите ключ и подключитесь заново.", ROLE_FORBIDDEN:"Для этого действия нужны права владельца или редактора.",
+  AUTH_ORIGIN_FORBIDDEN:"Откройте панель по тому же адресу, по которому запущен проект.",
+  BROWSER_CHANNEL_NOT_ALLOWED:"Укажите разрешённый адрес MAX для выбранного канала.", INVALID_CHAT_ID:"Укажите числовой chat_id канала MAX.",
+  BROWSER_LOGIN_OR_CHANNEL_REQUIRED:"Войдите в отдельном окне MAX и убедитесь, что аккаунт имеет доступ к каналу.",
+  BROWSER_PROFILE_BUSY:"Браузер проекта занят. Завершите вход или дождитесь текущей операции.",
+  BROWSER_START_FAILED:"Браузер не запустился. Проверьте выбранный браузер в настройках приложения.",
+  BROWSER_MODE_NOT_ENABLED:"Выберите браузерный адаптер MAX в настройках приложения.", BROWSER_DEPENDENCY_REQUIRED:"В окружении проекта не установлен Playwright.",
+  IMAGE_SCHEDULE_BUSY:"Сейчас выполняется другая операция. Её результат можно проверить кнопкой состояния.",
+  IMAGE_CHANNEL_PROFILE_REQUIRED:"Для этого канала ещё не настроен подбор изображений. Заполните профиль в настройках.",
+  CONFIG_SCHEMA_INVALID:"Настройки не соответствуют схеме: проверьте обязательные поля, время, дни и пределы.",
+  SCHEDULE_DAILY_CAP_EXCEEDED:"Число отправок в расписании больше дневного лимита. Измените часы или лимит.",
+  SCHEDULE_GAP_TOO_SMALL:"Часы стоят ближе, чем разрешённый минимальный промежуток между постами.",
+  CHANNEL_UNRESOLVED_PUBLICATION:"Сначала сверьте незавершённую отправку в разделе «Публикации».",
+  IMAGE_SCHEDULE_UNRESOLVED_PUBLICATION:"Сначала сверьте незавершённую отправку.", IMAGE_SCHEDULE_UNRESOLVED_CORRECTION:"Сначала сверьте незавершённую правку подписи.",
+  SETTINGS_DOCUMENT_INVALID:"Проверьте структуру JSON настроек.", BACKUP_CONFIG_CONTAINS_SECRET:"Значения ключей вводятся в отдельных полях ниже, а не в JSON настроек.",
+  NETWORK_FAILED:"Не удалось связаться с проектом. Проверьте, что он запущен.", SERVER_RESPONSE_INVALID:"Сервер вернул некорректный ответ.",
+  SOURCE_DISABLED:"Источник выключен. Включите его в настройках источников.", PANEL_OPERATION_FAILED:"Сервер не завершил операцию. Проверьте состояние проекта и параметры действия.",
+  INPUT_REQUIRED:"Заполните обязательные поля.", INVALID_JSON:"Исправьте JSON перед сохранением.", VIDEO_BACKEND_DISABLED:"Генератор видео ещё не подключён в настройках приложения."
+};
+
+// Обратная связь расположена над разделами и остаётся видимой при прокрутке.
+function notice(text, kind="idle") { $("feedback").textContent=text; $("feedback").dataset.state=kind; }
+function showError(error) { notice(error.code ? (error.message || errors[error.code] || "Действие не выполнено.") : "Действие не выполнено. Проверьте введённые данные.", "error"); }
+function fail(code, message) { const error=new Error(message || errors[code] || ("Действие не выполнено: "+code)); error.code=code; return error; }
+
+// Настоящие HTTP-ошибки, отсутствие JSON и потеря входа не превращаются в молчащий обработчик.
+async function api(path, body, key) {
+  const headers={"Content-Type":"application/json"};
+  if (key) headers.Authorization="Bearer "+key;
+  let response;
+  try { response=await fetch(path,{method:body===undefined?"GET":"POST",credentials:"same-origin",headers,body:body===undefined?undefined:JSON.stringify(body)}); }
+  catch (_) { throw fail("NETWORK_FAILED"); }
+  let value;
+  try { value=await response.json(); } catch (_) { throw fail("SERVER_RESPONSE_INVALID"); }
+  if (!response.ok) {
+    const code=value.code || (response.status===422?"CONFIG_SCHEMA_INVALID":"HTTP_"+response.status);
+    if (response.status===401) resetSession();
+    throw fail(code);
+  }
   return value;
 }
-// Выполняем действие и обновляем данные панели после успеха.
-async function action(path, body = {}) {
-  // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
-  try { $("result").textContent = JSON.stringify(await api(path, body), null, 2); await refresh(); }
-  // Показываем безопасный код ошибки без сохранения ключа доступа.
-  catch(error) { $("result").textContent = error.message; }
-}
-// Обновляем вкладку и создаём доступные действия для каждой записи.
-async function refresh() {
-  // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
-  try {
-    const rows = await api("/api/v1/" + tab);
-    $("content").replaceChildren();
-    // Создаём обработчики для каждого доступного действия или элемента.
-    for (const row of rows) {
-      const card = document.createElement("article"); card.className = "card";
-      const pre = document.createElement("pre"); pre.textContent = JSON.stringify(row, null, 2); card.append(pre);
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "videos") {
-        // Создаём обработчики для каждого доступного действия или элемента.
-        for (const [name,label] of [["approve-generation","Одобрить генерацию"],["poll","Проверить результат"],["assemble","Собрать ролик"],["cancel","Остановить проект"]]) {
-          const b=document.createElement("button"); b.textContent=label;
-          // Связываем действие пользователя с запросом к API проекта.
-          b.onclick=()=>action(`/api/v1/videos/${row.id}/${name}`, {revision:row.revision,plan_hash:row.plan_hash});card.append(b);
-        }
-        const index=document.createElement("input");index.type="number";index.value="0";index.min="0";card.append(index);
-        const file=document.createElement("input");file.placeholder="data/incoming/scene.mp4";card.append(file);
-        const rights=document.createElement("input");rights.placeholder="Права на сцену";card.append(rights);
-        const b=document.createElement("button");b.textContent="Импортировать готовую сцену";
-        // Связываем действие пользователя с запросом к API проекта.
-        b.onclick=()=>action(`/api/v1/videos/${row.id}/import-scene`,{index:Number(index.value),path:file.value,rights_basis:rights.value});card.append(b);
-      }
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "source-media") {
-        const caption=document.createElement("textarea");caption.placeholder="Русская подпись с подтверждёнными фактами";card.append(caption);
-        const b=document.createElement("button");b.textContent="Подготовить подборку";
-        // Связываем действие пользователя с запросом к API проекта.
-        b.onclick=()=>action("/api/v1/curate",{channel_id:$("channel").value,media_id:row.id,caption:caption.value});card.append(b);
-      }
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "assets") {
-        const b=document.createElement("button");b.textContent="Просмотреть ролик";
-        // Связываем действие пользователя с запросом к API проекта.
-        b.onclick=async()=>{try {
-          const r=await fetch(`/api/v1/assets/${row.id}/preview`,{headers:{Authorization:"Bearer "+token}});
-          if(!r.ok)throw new Error("Нет доступа к видео");
-          const v=document.createElement("video");v.controls=true;v.width=280;v.src=URL.createObjectURL(await r.blob());
-          v.onloadeddata=()=>URL.revokeObjectURL(v.src);card.append(v);b.disabled=true;
-        }catch(e){$("status").textContent=e.message;}};card.append(b);
-      }
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "drafts" && row.state === "published") {
-        const caption = document.createElement("textarea"); caption.value = row.current.body; card.append(caption);
-        const save = document.createElement("button"); save.textContent = "Исправить опубликованную подпись";
-        // Связываем действие пользователя с запросом к API проекта.
-        save.onclick = async () => {
-          // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
-          try {
-            const publications = await api("/api/v1/publications");
-            const intent = publications.find(p => p.draft_id === row.id && p.state === "confirmed");
-            // Проверяем условие перед изменением интерфейса или выполнением действия.
-            if (!intent) throw new Error("Подтверждённая публикация не найдена");
-            await action("/api/v1/publications/" + intent.id + "/correct", {revision:row.revision,body:caption.value});
-          } catch (e) { $("result").textContent = e.message; }
-        }; card.append(save);
-      }
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "drafts" && row.state !== "published") {
-        const path = document.createElement("input"); path.placeholder = "data/incoming/clip.mp4"; card.append(path);
-        const rights = document.createElement("input"); rights.placeholder = "Основание права на публикацию ролика"; card.append(rights);
-        const attach = document.createElement("button"); attach.textContent = "Приложить MP4";
-        // Связываем действие пользователя с запросом к API проекта.
-        attach.onclick = () => action(`/api/v1/drafts/${row.id}/video`, {path:path.value, rights_basis:rights.value}); card.append(attach);
-        const commercial = document.createElement("button"); commercial.textContent = row.commercial ? "Снять коммерческую отметку" : "Коммерческий материал";
-        // Связываем действие пользователя с запросом к API проекта.
-        commercial.onclick = () => action(`/api/v1/drafts/${row.id}/commercial`, {revision:row.revision, commercial:!row.commercial}); card.append(commercial);
-        const edit = document.createElement("textarea"); edit.value = row.current.body; card.append(edit);
-        const save = document.createElement("button"); save.textContent = "Сохранить новую ревизию";
-        // Связываем действие пользователя с запросом к API проекта.
-        save.onclick = () => action(`/api/v1/drafts/${row.id}/revise`, {revision:row.revision, body:edit.value}); card.append(save);
-        const approve = document.createElement("button"); approve.textContent = "Одобрить в календарь";
-        // Связываем действие пользователя с запросом к API проекта.
-        approve.onclick = () => action(`/api/v1/drafts/${row.id}/approve`, {revision:row.revision, content_hash:row.content_hash}); card.append(approve);
-        const reject = document.createElement("button"); reject.textContent = "Отклонить";
-        // Связываем действие пользователя с запросом к API проекта.
-        reject.onclick = () => action(`/api/v1/drafts/${row.id}/reject`, {revision:row.revision}); card.append(reject);
-      }
-      // Для выбранной вкладки показываем соответствующие действия над записью.
-      if (tab === "publications" && ["sending","unknown"].includes(row.state)) {
-        const reconcile = document.createElement("button"); reconcile.textContent = "Сверить результат";
-        // Связываем действие пользователя с запросом к API проекта.
-        reconcile.onclick = () => action(`/api/v1/publications/${row.id}/reconcile`); card.append(reconcile);
-      }
-      $("content").append(card);
-    }
-    $("status").textContent = "Подключено. " + rows.length + " записей.";
-  } catch(error) { $("status").textContent = error.message; }
-}
-// Связываем действие пользователя с запросом к API проекта.
-$("login").onclick = async () => {token = $("token").value; $("token").value = ""; await loadImageChannels(); await refresh();};
-// Связываем действие пользователя с запросом к API проекта.
-$("refresh").onclick = refresh;
-// Создаём обработчики для каждого доступного действия или элемента.
-for (const button of document.querySelectorAll("[data-tab]")) button.onclick = () => {
-  tab = button.dataset.tab; $("heading").textContent = button.textContent; refresh();
-};
-const channelPath = actionName => `/api/v1/channels/${encodeURIComponent($("channel").value)}/${actionName}`;
-// Связываем действие пользователя с запросом к API проекта.
-$("connect").onclick = () => action(channelPath("connect"), {chat_id:$("chat").value});
-// Создаём обработчики для каждого доступного действия или элемента.
-for (const name of ["pause","resume","bootstrap"]) $(name).onclick = () => action(channelPath(name));
-// Связываем действие пользователя с запросом к API проекта.
-$("growth").onclick = () => action(channelPath("growth-plan"));
-// Связываем действие пользователя с запросом к API проекта.
-$("report").onclick = async () => {try { $("result").textContent = JSON.stringify(await api(`/api/v1/reports/${encodeURIComponent($("channel").value)}`), null, 2); } catch(e) {$("result").textContent=e.message;}};
-// Связываем действие пользователя с запросом к API проекта.
-$("validate").onclick = () => action("/api/v1/config/validate");
-// Связываем действие пользователя с запросом к API проекта.
-$("activate").onclick = () => action("/api/v1/config/activate");
-// Связываем действие пользователя с запросом к API проекта.
-$("generate-plan").onclick=()=>action("/api/v1/videos",{channel_id:$("channel").value,idea:$("video-idea").value});
-// Связываем действие пользователя с запросом к API проекта.
-$("create-plan").onclick=()=>{try{action("/api/v1/videos",{channel_id:$("channel").value,plan:JSON.parse($("video-plan").value)});}catch(e){$("result").textContent="Ошибка JSON сценария";}};
 
-// Связываем действие пользователя с запросом к API проекта.
-$("browser-login").onclick=()=>action("/api/v1/browser/login",{chat_id:$("chat").value});
-// Связываем действие пользователя с запросом к API проекта.
-$("browser-check").onclick=()=>action("/api/v1/browser/check",{chat_id:$("chat").value});
-
-// Блокируем кнопки на время операции и показываем её результат.
-async function imageAction(path, body) {
-  const buttons = [...document.querySelectorAll("button[id^='images-']")];
-  buttons.forEach(b => b.disabled = true);
-  $("images-result").textContent = "Выполняется…";
-  // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
-  try { $("images-result").textContent = JSON.stringify(await api(path, body), null, 2); }
-  // Показываем безопасный код ошибки без сохранения ключа доступа.
-  catch (e) { $("images-result").textContent = e.message; }
-  // Восстанавливаем доступность кнопок после любого результата.
-  finally { buttons.forEach(b => b.disabled = false); }
-}
-const imageChannel = () => encodeURIComponent($("image-channel").value);
-// Связываем действие пользователя с запросом к API проекта.
-$("images-status").onclick = () => imageAction("/api/v1/images/status?channel_id=" + imageChannel());
-// Связываем действие пользователя с запросом к API проекта.
-$("images-scan").onclick = () => imageAction("/api/v1/images/scan", {all_sources:true, channel_id:$("image-channel").value});
-// Создаём обработчики для каждого доступного действия или элемента.
-for (const name of ["pause", "resume", "tick"])
-  // Связываем действие пользователя с запросом к API проекта.
-  $("images-" + name).onclick = () => imageAction("/api/v1/images/schedule/" + name + "?channel_id=" + imageChannel(), {});
-
-// Список адресатов строим из профилей проекта; свободный ввод ID не нужен.
-async function loadImageChannels() {
-  const rows = await api("/api/v1/channel-profiles");
-  const select = $("image-channel"), previous = select.value;
-  select.replaceChildren();
-  // Создаём обработчики для каждого доступного действия или элемента.
-  for (const row of rows) {
-    // Проверяем условие перед изменением интерфейса или выполнением действия.
-    if (row.schedule.state === "not_configured") continue;
-    const option = document.createElement("option");
-    option.value = row.channel.id; option.textContent = row.channel.name + " (" + row.channel.id + ")";
-    select.append(option);
+// Чтение и редактирование имеют разные разрешения; занятая кнопка не отправляет повторный запрос.
+function syncButtons() {
+  for (const button of document.querySelectorAll("button")) {
+    if (button.id==="login") {button.disabled=state.busy.has(button);continue;}
+    if (button.id==="logout") {button.disabled=!state.authenticated || state.busy.has(button);continue;}
+    const allowed=!button.dataset.role || button.dataset.role===state.role || (button.dataset.role==="editor" && state.role==="owner");
+    button.disabled=!state.authenticated || !allowed || state.busy.has(button);
+    button.title=!state.authenticated?"Подключитесь к панели":!allowed?"Недостаточно прав для этого действия":"";
   }
-  // Проверяем условие перед изменением интерфейса или выполнением действия.
-  if ([...select.options].some(option => option.value === previous)) select.value = previous;
 }
-// Полный профиль позволяет согласованно изменить тему, рубрики и критерии модели.
-$("channel-profiles").onclick = async () => {
-  // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
-  try { $("channel-profile-json").value = JSON.stringify(await api("/api/v1/channel-profiles"), null, 2); }
-  // Показываем безопасный код ошибки без сохранения ключа доступа.
-  catch (e) { $("result").textContent = e.message; }
-};
-// Связываем действие пользователя с запросом к API проекта.
-$("channel-apply").onclick = async () => {
-  // Отображаем ошибку пользователю, сохраняя возможность следующего действия.
+function resetSession() {
+  state.authenticated=false; state.role=null; state.profiles=[]; state.settings=null;
+  $("content").replaceChildren(); $("credentials-fields").replaceChildren();
+  $("status").textContent="Сессия завершена. Подключитесь к панели."; syncButtons();
+}
+function requireInput(value, message) { if(!String(value).trim())throw fail("INPUT_REQUIRED",message);return String(value).trim(); }
+function parseJSON(text) {try{return JSON.parse(text);}catch(_){throw fail("INVALID_JSON");}}
+
+// Каждая операция показывает начало, итог и ошибку; обновление списка не скрывает её результат.
+async function perform(button, task, success) {
+  if (state.busy.has(button)) return;
+  state.busy.add(button); syncButtons(); button.setAttribute("aria-busy","true");
+  notice("Выполняется: "+button.textContent.trim()+"…","working");
   try {
-    const value = JSON.parse($("channel-profile-json").value);
-    // Проверяем условие перед изменением интерфейса или выполнением действия.
-    if (Array.isArray(value)) throw new Error("Оставьте один объект профиля из списка.");
-    const document = {channel:value.channel, images:value.images};
-    // Проверяем условие перед изменением интерфейса или выполнением действия.
-    if (value.chat_id && value.chat_title) { document.chat_id = value.chat_id; document.chat_title = value.chat_title; }
-    await action("/api/v1/channel-profiles", document);
-    await loadImageChannels();
-  } catch (e) { $("result").textContent = e.message; }
+    const value=await task();
+    $("result").textContent=JSON.stringify(value===undefined?{state:"done"}:value,null,2);
+    notice(typeof success==="function"?success(value):(success || summary(value)),"success");
+    return value;
+  } catch(error) {showError(error);return undefined;}
+  finally {state.busy.delete(button);button.removeAttribute("aria-busy");syncButtons();}
+}
+function bind(id, task, success) {const button=$(id);button.onclick=()=>perform(button,task,success);}
+function summary(value) {
+  if(value && typeof value.paused==="boolean")return value.paused?"Канал поставлен на паузу.":"Канал возобновлён.";
+  if(value && value.queued)return "Задание добавлено в очередь проекта.";
+  if(value && value.scheduled)return "Черновик одобрен и добавлен в календарь.";
+  if(value && value.state==="already_logged_in")return "Вход в MAX уже выполнен. Выбранный канал доступен для публикации.";
+  if(value && value.state==="login_window_requested")return "Открыто отдельное окно MAX. Войдите по QR-коду, затем нажмите «Проверить браузер».";
+  if(value && value.publish===true)return "Браузер работает. Доступ к выбранному каналу и право публикации подтверждены.";
+  if(value && value.schedule) return "Расписание: "+value.schedule.state+(value.schedule.next_run_at?". Следующий запуск: "+new Date(value.schedule.next_run_at).toLocaleString("ru-RU",{timeZone:value.schedule.timezone}):".");
+  if(value && value.restart_required && (value.restart_required===true || value.restart_required.length))return "Настройки сохранены. Для смены хранилища перезапустите проект; расписания остановлены.";
+  if(value && value.state==="saved")return "Настройки сохранены. Проверьте подключения и включите нужные расписания.";
+  if(value && value.scan_state)return "Сбор: "+value.scan_state+". В подборке "+value.top.length+" изображений.";
+  if(value && value.state==="ready")return "Сбор завершён. В подборке "+value.top.length+" изображений; отправка не выполнялась.";
+  if(value && value.next_run_at)return "Следующий запуск: "+new Date(value.next_run_at).toLocaleString("ru-RU",{timeZone:value.timezone});
+  if(value && value.state==="not_due")return "Время следующей отправки ещё не наступило.";
+  if(value && value.state==="already_checked")return "Этот интервал уже обработан; повторной отправки нет.";
+  return "Готово. Результат доступен в «Последнем ответе сервера».";
+}
+
+// Профили выбираются из конфигурации; уже подключённый канал имеет приоритет при первом входе.
+async function loadChannels() {
+  state.profiles=await api("/api/v1/channel-profiles");
+  for (const id of ["channel","calendar-channel","profile-channel","image-channel"]) {
+    const select=$(id), old=select.value;
+    const rows=id==="image-channel"?state.profiles.filter(row=>row.schedule.state!=="not_configured"):state.profiles;
+    select.replaceChildren();
+    for(const row of rows){const option=document.createElement("option");option.value=row.channel.id;option.textContent=row.channel.name+" ("+row.channel.id+")";select.append(option);}
+    const preferred=rows.find(row=>row.channel.id===old)||rows.find(row=>row.chat_id)||rows[0];
+    if(preferred)select.value=preferred.channel.id;
+  }
+  selectChannel();
+}
+function profile(id=$("channel").value) {const value=state.profiles.find(row=>row.channel.id===id);if(!value)throw fail("INPUT_REQUIRED","Выберите профиль канала.");return value;}
+function selectChannel() {
+  const row=state.profiles.find(item=>item.channel.id===$("channel").value);
+  $("chat").value=row && row.chat_id?row.chat_id:"";
+  $("channel-context").textContent=row?(row.chat_id?"Подключён MAX "+row.chat_id+". Канал "+(row.paused?"на паузе между отправками.":"активен."):"Профиль ещё не подключён к MAX. Укажите разрешённый chat_id."):"Настройте первый канал.";
+}
+function chatId(){return requireInput($("chat").value,"Укажите chat_id выбранного канала MAX.");}
+function channelPath(action){return "/api/v1/channels/"+encodeURIComponent($("channel").value)+"/"+action;}
+
+// Вход повторно с пустым полем сохраняет действующую сессию вместо её удаления.
+bind("login",async()=>{
+  const key=$("token").value.trim();
+  let value;
+  try {value=key?await api("/api/v1/session/login",{},key):await api("/api/v1/session");}
+  finally {$("token").value="";}
+  state.authenticated=true;state.role=value.role;
+  $("status").textContent="Подключено: "+roles[state.role]+". Вход сохраняется при обновлении страницы.";
+  await loadChannels(); await refresh();return value;
+},"Вход выполнен. Выберите канал и действие.");
+bind("logout",async()=>{await api("/api/v1/session/logout",{});resetSession();return {authenticated:false};},"Вы вышли из панели.");
+$("token").onkeydown=event=>{if(event.key==="Enter")$("login").click();};
+$("channel").onchange=selectChannel;
+
+// Списки очищаются при смене вкладки; старые записи не выдаются за новый результат.
+function selectView(view) {
+  state.view=view;
+  $("workspace-panel").hidden=view!=="workspace";$("calendar-panel").hidden=view!=="calendar";$("settings-panel").hidden=view!=="settings";
+  for(const button of document.querySelectorAll("#tabs button"))button.classList.toggle("active",button.dataset.tab===state.tab && view==="workspace" || button.dataset.view===view);
+}
+async function refresh() {
+  $("content").replaceChildren();
+  const rows=await api("/api/v1/"+state.tab);
+  if(!rows.length){const empty=document.createElement("p");empty.className="empty";empty.textContent="В этом разделе пока нет записей.";$("content").append(empty);}
+  for(const row of rows)renderCard(row);
+  syncButtons();return {section:state.tab,records:rows.length};
+}
+bind("refresh",refresh,"Список обновлён.");
+for(const button of document.querySelectorAll("[data-tab]"))button.onclick=()=>perform(button,async()=>{
+  state.tab=button.dataset.tab;selectView("workspace");$("heading").textContent=button.textContent;return refresh();
+},"Раздел обновлён.");
+
+// Кнопки записей пользуются теми же обработчиками, что и основные действия.
+function cardButton(card,label,task,role="owner",refreshAfter=true) {
+  const button=document.createElement("button");button.textContent=label;button.dataset.role=role;
+  button.onclick=()=>perform(button,async()=>{const value=await task();if(refreshAfter)await refresh();return value;});card.append(button);return button;
+}
+function input(card,placeholder,value="",multiline=false) {
+  const element=document.createElement(multiline?"textarea":"input");element.placeholder=placeholder;element.setAttribute("aria-label",placeholder);element.value=value;card.append(element);return element;
+}
+function renderCard(row) {
+  const card=document.createElement("article");card.className="card";
+  const data=document.createElement("pre");data.textContent=JSON.stringify(row,null,2);card.append(data);
+  if(state.tab==="sources")cardButton(card,"Собрать источник",()=>api("/api/v1/sources/"+row.id+"/collect",{}));
+  if(state.tab==="videos"){
+    for(const pair of [["approve-generation","Одобрить генерацию"],["poll","Проверить результат"],["assemble","Собрать ролик"],["cancel","Остановить проект"]])
+      cardButton(card,pair[1],()=>api("/api/v1/videos/"+row.id+"/"+pair[0],{revision:row.revision,plan_hash:row.plan_hash}));
+    const index=input(card,"Номер сцены","0");index.type="number";index.min="0";
+    const path=input(card,"Путь готовой сцены"),rights=input(card,"Права на сцену");
+    cardButton(card,"Импортировать готовую сцену",()=>api("/api/v1/videos/"+row.id+"/import-scene",{index:Number(index.value),path:requireInput(path.value,"Укажите путь сцены."),rights_basis:requireInput(rights.value,"Укажите права на сцену.")}));
+  }
+  if(state.tab==="source-media"){
+    const caption=input(card,"Подпись подборки","",true);
+    cardButton(card,"Подготовить подборку",()=>api("/api/v1/curate",{channel_id:$("channel").value,media_id:row.id,caption:requireInput(caption.value,"Введите подпись подборки.")}));
+  }
+  if(state.tab==="assets")cardButton(card,"Просмотреть ролик",async()=>{
+    const response=await fetch("/api/v1/assets/"+row.id+"/preview",{credentials:"same-origin"});
+    if(!response.ok)throw fail("VIDEO_PREVIEW_FAILED","Предпросмотр ролика недоступен.");
+    const video=document.createElement("video");video.controls=true;video.width=280;
+    const url=URL.createObjectURL(await response.blob());video.src=url;video.onloadeddata=()=>URL.revokeObjectURL(url);card.append(video);
+    return {state:"preview_ready"};
+  },"",false);
+  if(state.tab==="drafts" && row.state==="published"){
+    const caption=input(card,"Опубликованная подпись",row.current.body,true);
+    cardButton(card,"Исправить опубликованную подпись",async()=>{
+      const items=await api("/api/v1/publications"),intent=items.find(item=>item.draft_id===row.id && item.state==="confirmed");
+      if(!intent)throw fail("PUBLICATION_NOT_CONFIRMED","Подтверждённая публикация не найдена.");
+      return api("/api/v1/publications/"+intent.id+"/correct",{revision:row.revision,body:requireInput(caption.value,"Введите новую подпись.")});
+    });
+  }
+  if(state.tab==="drafts" && row.state!=="published"){
+    const path=input(card,"Путь MP4"),rights=input(card,"Основание права на публикацию");
+    cardButton(card,"Приложить MP4",()=>api("/api/v1/drafts/"+row.id+"/video",{path:requireInput(path.value,"Укажите путь MP4."),rights_basis:requireInput(rights.value,"Укажите права на видео.")}));
+    cardButton(card,row.commercial?"Снять коммерческую отметку":"Коммерческий материал",()=>api("/api/v1/drafts/"+row.id+"/commercial",{revision:row.revision,commercial:!row.commercial}),"editor");
+    const body=input(card,"Текст черновика",row.current.body,true);
+    cardButton(card,"Сохранить новую ревизию",()=>api("/api/v1/drafts/"+row.id+"/revise",{revision:row.revision,body:requireInput(body.value,"Введите текст.")}),"editor");
+    cardButton(card,"Одобрить в календарь",()=>api("/api/v1/drafts/"+row.id+"/approve",{revision:row.revision,content_hash:row.content_hash}),"editor");
+    cardButton(card,"Отклонить",()=>api("/api/v1/drafts/"+row.id+"/reject",{revision:row.revision}),"editor");
+  }
+  if(state.tab==="publications" && ["sending","unknown"].includes(row.state))
+    cardButton(card,"Сверить результат",()=>api("/api/v1/publications/"+row.id+"/reconcile",{}));
+  $("content").append(card);
+}
+for(const name of ["pause","resume","bootstrap"])bind(name,async()=>{const value=await api(channelPath(name),{});await loadChannels();await refresh();return value;});
+bind("connect",async()=>{const value=await api(channelPath("connect"),{chat_id:chatId()});await loadChannels();await refresh();return value;},"Подключение канала проверено и сохранено.");
+bind("growth",()=>api(channelPath("growth-plan"),{}));
+bind("report",()=>api("/api/v1/reports/"+encodeURIComponent($("channel").value)),"Отчёт готов.");
+bind("validate",()=>api("/api/v1/config/validate",{}),"Действующая конфигурация прошла проверку.");
+bind("activate",async()=>{const result=await api("/api/v1/config/activate",{});await loadChannels();return result;},"Конфигурация применена.");
+bind("generate-plan",async()=>{const value=await api("/api/v1/videos",{channel_id:$("channel").value,idea:requireInput($("video-idea").value,"Введите идею ролика.")});await refresh();return value;});
+bind("create-plan",async()=>{const value=await api("/api/v1/videos",{channel_id:$("channel").value,plan:parseJSON($("video-plan").value)});await refresh();return value;});
+bind("browser-login",()=>api("/api/v1/browser/login",{chat_id:chatId()}));
+bind("browser-check",()=>api("/api/v1/browser/check",{chat_id:chatId()}));
+
+// Сбор, состояние и управление расписанием используют выбранный профиль изображений.
+const imageChannel=()=>encodeURIComponent(requireInput($("image-channel").value,"Настройте профиль изображений."));
+for(const name of ["status","scan","pause","resume","tick"])bind("images-"+name,async()=>{
+  const channel=imageChannel();let value;
+  if(name==="status")value=await api("/api/v1/images/status?channel_id="+channel);
+  else if(name==="scan")value=await api("/api/v1/images/scan",{all_sources:true,channel_id:decodeURIComponent(channel)});
+  else value=await api("/api/v1/images/schedule/"+name+"?channel_id="+channel,{});
+  $("images-result").textContent=JSON.stringify(value,null,2);return value;
+});
+
+// Календарь отображает даты из сервера в часовом поясе канала, без зависимости от часов браузера.
+const dayNames=["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+for(let index=0;index<7;index++){
+  const label=document.createElement("label");label.className="checkbox";const box=document.createElement("input");
+  box.type="checkbox";box.value=String(index);box.checked=true;label.append(box,document.createTextNode(dayNames[index]));$("schedule-days").append(label);
+}
+async function loadCalendar() {
+  const channel=requireInput($("calendar-channel").value,"Выберите канал.");
+  const date=$("calendar-date").value;
+  const value=await api("/api/v1/calendar?channel_id="+encodeURIComponent(channel)+(date?"&start="+date:""));
+  state.calendar=value;$("calendar-date").value=value.week_start;
+  $("holiday-enabled").checked=value.holiday_search_enabled;
+  $("holiday-info").textContent="Каталог: "+value.holiday_count+" праздничных дат · проверенный год "+value.holiday_catalog_year+". Названия используются только в первом запуске дня.";
+  $("calendar-range").textContent=value.week_start+" — "+value.week_end+" · "+value.timezone;
+  $("calendar-grid").replaceChildren();$("calendar-detail").hidden=true;
+  for(const day of value.days){
+    const card=document.createElement("article");card.className="calendar-day"+(day.is_today?" today":"");
+    const heading=document.createElement("h3");heading.textContent=day.weekday;
+    const dateLabel=document.createElement("div");dateLabel.className="calendar-date";dateLabel.textContent=day.date.slice(8)+"."+day.date.slice(5,7);card.append(heading,dateLabel);
+    for(const holiday of day.holidays || []){
+      const label=document.createElement("div");label.className="holiday-tag";label.textContent=holiday.name;label.title="Поисковый тег: "+holiday.name;card.append(label);
+    }
+    for(const event of day.events){
+      const button=document.createElement("button");button.className="calendar-event";button.dataset.state=event.state;
+      const time=document.createElement("time");time.textContent=event.time;button.append(time,document.createTextNode(event.title));
+      if(event.holiday_tags && event.holiday_tags.length){const tag=document.createElement("small");tag.textContent="Праздничный поиск: "+event.holiday_tags.join(", ");button.append(tag);}
+      button.onclick=()=>perform(button,()=>showEvent(event),"Показаны сведения о публикации.");card.append(button);
+    }
+    if(!day.events.length){const text=document.createElement("p");text.className="hint";text.textContent="Нет публикаций";card.append(text);}
+    $("calendar-grid").append(card);
+  }
+  const plan=value.schedule.plan || {kind:"weekly"};
+  $("schedule-kind").value=plan.kind;$("schedule-interval").value=plan.interval_hours || "4";
+  $("schedule-timezone").value=value.timezone;$("schedule-times").value=value.schedule.times.join(", ");
+  for(const input of $("schedule-days").querySelectorAll("input"))input.checked=value.schedule.weekdays.includes(Number(input.value));
+  $("schedule-gap").value=value.publication_policy.min_gap_minutes;$("schedule-limit").value=value.publication_policy.max_posts_per_day;
+  $("schedule-enabled").checked=value.schedule.enabled===true; scheduleMode();syncButtons();return value;
+}
+async function showEvent(event){
+  const target=$("calendar-detail");target.replaceChildren();target.hidden=false;
+  const title=document.createElement("h3");title.textContent=event.time+" · "+event.title;
+  const text=document.createElement("pre");text.textContent=event.body+"\n\nСостояние: "+event.state;target.append(title,text);
+  if(event.kind==="publication" && event.image){
+    const response=await fetch("/api/v1/drafts/"+event.id+"/image",{credentials:"same-origin"});
+    if(response.ok){const image=document.createElement("img");image.alt="Изображение публикации";const url=URL.createObjectURL(await response.blob());image.src=url;image.onload=()=>URL.revokeObjectURL(url);target.append(image);}
+  }
+  return {event_id:event.id,state:event.state};
+}
+function scheduleMode(){const weekly=$("schedule-kind").value==="weekly";$("schedule-days").disabled=!weekly;$("schedule-times").disabled=!weekly;$("schedule-interval").disabled=weekly;}
+$("schedule-kind").onchange=scheduleMode;
+bind("calendar-tab",async()=>{selectView("calendar");return loadCalendar();},"Календарь загружен.");
+bind("calendar-refresh",loadCalendar,"Календарь обновлён.");
+bind("calendar-today",async()=>{$("calendar-date").value="";return loadCalendar();},"Показана текущая неделя.");
+for(const name of ["prev","next"])bind("calendar-"+name,async()=>{
+  const base=new Date($("calendar-date").value+"T12:00:00Z");base.setUTCDate(base.getUTCDate()+(name==="prev"?-7:7));$("calendar-date").value=base.toISOString().slice(0,10);return loadCalendar();
+},"Неделя изменена.");
+$("calendar-channel").onchange=()=>perform($("calendar-refresh"),loadCalendar,"Календарь канала загружен.");
+$("calendar-date").onchange=()=>perform($("calendar-refresh"),loadCalendar,"Неделя загружена.");
+bind("schedule-save",async()=>{
+  const kind=$("schedule-kind").value, interval=Number($("schedule-interval").value);
+  const times=kind==="interval"?Array.from({length:24/interval},(_,n)=>String(n*interval).padStart(2,"0")+":00"):$("schedule-times").value.split(",").map(value=>value.trim()).filter(Boolean);
+  const weekdays=kind==="interval"?[0,1,2,3,4,5,6]:[...$("schedule-days").querySelectorAll("input:checked")].map(input=>Number(input.value));
+  const value=await api("/api/v1/calendar/"+encodeURIComponent($("calendar-channel").value)+"/schedule",{kind,interval_hours:interval,times,weekdays,timezone:$("schedule-timezone").value.trim(),enabled:$("schedule-enabled").checked,min_gap_minutes:Number($("schedule-gap").value),max_posts_per_day:Number($("schedule-limit").value)});
+  await loadChannels();await loadCalendar();return value;
+},"Расписание сохранено. Следующее время отправки показано в календаре.");
+
+// Праздники обновляются по фактическому каталогу; повторного праздничного запуска в день нет.
+bind("holidays-toggle",async()=>{const value=await api("/api/v1/holidays/config",{enabled:$("holiday-enabled").checked});await loadCalendar();return value;},"Настройка праздничного поиска сохранена.");
+bind("holidays-update",async()=>{const value=await api("/api/v1/holidays/update",{});await loadCalendar();return value;},"Каталог праздников обновлён.");
+
+// Поля направления обновляют тот же полный профиль, который доступен в JSON.
+async function loadProfile(){
+  const row=profile($("profile-channel").value),documentValue={channel:row.channel,images:row.images};
+  $("channel-profile-json").value=JSON.stringify(documentValue,null,2);
+  $("profile-name").value=row.channel.name;$("profile-theme").value=row.channel.theme;$("profile-audience").value=row.channel.audience;
+  $("profile-queries").value=row.images?row.images.queries.join(", "):"";$("profile-positive").value=row.images?row.images.local_prompts[0]:"";
+  $("profile-negative").value=row.images?row.images.local_prompts[1]:"";$("profile-caption").value=row.images?row.images.caption_title:"";
+  return documentValue;
+}
+for(const id of ["profile-name","profile-theme","profile-audience","profile-queries","profile-positive","profile-negative","profile-caption"])$(id).oninput=()=>{
+  try{
+    const value=parseJSON($("channel-profile-json").value);value.channel.name=$("profile-name").value;value.channel.theme=$("profile-theme").value;value.channel.audience=$("profile-audience").value;
+    if(!value.images)value.images={queries:[],local_prompts:["",""],caption_title:""};
+    value.images.queries=$("profile-queries").value.split(",").map(text=>text.trim()).filter(Boolean);
+    value.images.local_prompts=[$("profile-positive").value,$("profile-negative").value];value.images.caption_title=$("profile-caption").value;
+    $("channel-profile-json").value=JSON.stringify(value,null,2);
+  }catch(error){showError(error);}
 };
+bind("channel-profiles",loadProfile,"Профиль загружен. Измените поля и примените его.");
+$("profile-channel").onchange=()=>perform($("channel-profiles"),loadProfile,"Профиль загружен.");
+bind("channel-apply",async()=>{const value=parseJSON($("channel-profile-json").value);const result=await api("/api/v1/channel-profiles",value);await loadChannels();await loadProfile();return result;},"Профиль сохранён. Канал и его расписание на паузе до проверки.");
+
+// Настройки сохраняются цельным проверяемым документом; переход между разделами не теряет правки.
+const sectionHelp={app:"Адаптер MAX, разрешённые адресаты браузера, локальные сервисы, OpenCode, видео, бюджеты и пути установки.",topic:"Темы, аудитории, рубрики, ограничения, язык и правила всех каналов.",sources:"Источники редакции, интервалы сбора и основания прав.",image_sources:"Бесплатные сайты, поисковые запросы и общие пороги просмотров, лайков и размеров.",image_channels:"Описания локальной CLIP, персональные фильтры, темы и расписания.",workflow:"Граф ComfyUI; путь задаётся в app.video.workflow_path. null означает, что граф не выбран.",holidays:"Названия, даты, дополнительные теги и подтверждённые ежегодные правила. Каталог можно дополнить или отключить праздничный поиск."};
+function storeSection(){if(!state.settings)throw fail("INPUT_REQUIRED","Сначала загрузите настройки.");state.settings[state.section]=parseJSON($("settings-json").value);}
+function displaySection(){state.section=$("settings-section").value;$("settings-json").value=JSON.stringify(state.settings[state.section],null,2);$("settings-help").textContent=sectionHelp[state.section] || "";}
+async function loadSettings(){
+  const value=await api("/api/v1/settings");state.settings=value.configuration;displaySection();
+  $("credentials-fields").replaceChildren();
+  for(const item of value.credentials){
+    const label=document.createElement("label");label.textContent=item.name+" · "+(item.configured?"настроен":"не настроен");
+    const input=document.createElement("input");input.type="password";input.autocomplete="off";input.dataset.credential=item.name;input.placeholder="Новое значение; пустое — оставить прежнее";label.append(input);$("credentials-fields").append(label);
+  }
+  return {state:"loaded",sections:Object.keys(value.configuration)};
+}
+bind("settings-tab",async()=>{selectView("settings");await loadProfile();return loadSettings();},"Настройки загружены.");
+bind("settings-load",loadSettings,"Настройки загружены.");
+$("settings-section").onchange=()=>{
+  try{storeSection();displaySection();}
+  catch(error){$("settings-section").value=state.section;showError(error);}
+};
+bind("settings-format",async()=>{const value=parseJSON($("settings-json").value);$("settings-json").value=JSON.stringify(value,null,2);return {state:"formatted"};},"JSON отформатирован.");
+bind("settings-validate",async()=>{storeSection();return api("/api/v1/settings/validate",state.settings);},"Изменения прошли проверку.");
+bind("settings-save",async()=>{storeSection();const value=await api("/api/v1/settings/save",state.settings);await loadChannels();return value;});
+bind("credentials-save",async()=>{
+  const values={};for(const input of document.querySelectorAll("[data-credential]"))if(input.value)values[input.dataset.credential]=input.value;
+  if(!Object.keys(values).length)throw fail("INPUT_REQUIRED","Введите хотя бы одно новое значение ключа.");
+  try{return await api("/api/v1/settings/credentials",values);}
+  finally{for(const input of document.querySelectorAll("[data-credential]"))input.value="";}
+},"Новые значения сохранены локально. При замене ключа панели подключитесь заново.");
+
+// При загрузке страницы восстанавливаем роль из HttpOnly-cookie; ожидаемое отсутствие входа не является ошибкой.
+async function restoreSession(){
+  syncButtons();
+  try{
+    const value=await api("/api/v1/session");state.authenticated=true;state.role=value.role;
+    $("status").textContent="Подключено: "+roles[state.role]+". Сессия восстановлена.";
+    await loadChannels();selectView("workspace");await refresh();notice("Панель подключена. Выберите действие.","success");
+  }catch(error){
+    if(!["AUTH_REQUIRED","AUTH_INVALID","SESSION_EXPIRED"].includes(error.code))showError(error);
+    else notice("Введите ключ доступа и нажмите «Подключиться».");
+  }finally{syncButtons();}
+}
+window.addEventListener("unhandledrejection",()=>notice("Не удалось завершить действие. Обновите панель или проверьте состояние сервера.","error"));
+restoreSession();

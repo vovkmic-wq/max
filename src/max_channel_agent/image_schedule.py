@@ -72,6 +72,8 @@ def status(root, *, at=None, channel_id="test"):
     # Обрабатываем ветвь при условии: engine.get('heartbeat_at') and (current - datetime.fromisoformat(engine['heartbeat_at'])).total_seconds() > 45.
     if engine.get("heartbeat_at") and (current - datetime.fromisoformat(engine["heartbeat_at"])).total_seconds() > 45:
         engine = {**engine, "state": "offline"}
+    from .calendar_schedule import hours_and_days
+    times, weekdays = hours_and_days(cfg)
     phase = last.get("phase", "idle")
     # Обрабатываем ветвь при условии: not control.get('enabled').
     if not control.get("enabled"):
@@ -89,10 +91,13 @@ def status(root, *, at=None, channel_id="test"):
     # Обрабатываем ветвь при условии: last.get('slot') == slot.
     if last.get("slot") == slot:
         boundary = following
+    from .calendar_schedule import plan
+    if plan(cfg)["kind"] == "weekly" and current.timestamp() - boundary.timestamp() > 300:
+        boundary = following
     boundary = max(boundary, not_before)
     return {"state": state, "enabled": bool(control.get("enabled")),
             "channel_id": channel_id, "timezone": cfg["timezone"],
-            "hours": list(range(0, 24, cfg["interval_hours"])),
+            "hours": sorted({int(value[:2]) for value in times}), "times": times, "weekdays": weekdays,
             "next_run_at": boundary.isoformat() if state == "enabled" else None,
             "last_run": last, "engine": engine}
 
@@ -139,7 +144,7 @@ def configure(root, enabled, *, at=None, channel_id="test"):
 
 # Выполняем один допустимый шаг обработки с учётом сохранённого состояния.
 def tick(root, *, at=None, runner=None, channel_id="test"):
-    current, _, _, slot, cfg = window(root, channel_id, at)
+    current, start, following, slot, cfg = window(root, channel_id, at)
     # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with lock(root, "run"):
         control = read(root, "control", {"enabled": False}, channel_id)
@@ -164,6 +169,10 @@ def tick(root, *, at=None, runner=None, channel_id="test"):
         # Обрабатываем ветвь при условии: last.get('slot') == slot.
         if last.get("slot") == slot:
             return {"state": "already_checked", "slot": slot}
+        # Недельные часы не догоняем задним числом после долгого выключения компьютера.
+        from .calendar_schedule import plan
+        if plan(cfg)["kind"] == "weekly" and current.timestamp() - start.timestamp() > 300:
+            return {"state": "not_due", "next_run_at": following.isoformat()}
         record = {"phase": "running", "slot": slot, "started_at": current.isoformat(),
                   "pid": os.getpid()}
         write(root, "last", record, channel_id)

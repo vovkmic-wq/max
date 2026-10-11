@@ -72,6 +72,8 @@ class Service:
     def activate(self, settings=None, actor="owner"):
         settings = settings or self.settings
         publisher_changed = self.settings.app["max"] != settings.app["max"]
+        editor_changed = self.settings.app["opencode"] != settings.app["opencode"]
+        video_changed = self.settings.app.get("video") != settings.app.get("video")
         # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
         with self.db.session.begin() as session:
             # Обрабатываем ветвь при условии: not session.get(ConfigVersion, settings.hash).
@@ -115,6 +117,14 @@ class Service:
         if publisher_changed:
             self.publisher.close()
             self.publisher = self.make_publisher(settings)
+        # Изменённые сервисы перечитывают настройки, а не продолжают работать со старым объектом.
+        if editor_changed:
+            self.editor.client.close()
+            self.editor = OpenCode(settings)
+        if video_changed:
+            from .hybrid import Hybrid
+            self.hybrid.close()
+            self.hybrid = Hybrid(self)
         self.config_error = None
 
     # Перечитываем конфигурацию или обновляем доступное состояние.

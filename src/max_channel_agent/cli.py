@@ -30,7 +30,9 @@ def load_env(root):
 # Создаём отсутствующие настройки или структуру хранения.
 def initialize(root):
     # Последовательно обрабатываем элементы: ('app', 'sources', 'image_sources').
-    for name in ("app", "sources", "image_sources"):
+    for name in ("app", "sources", "image_sources", "holidays"):
+        if not (root / f"config/{name}.example.json").exists():
+            continue
         target = root / f"config/{name}.json"
         # Обрабатываем ветвь при условии: not target.exists().
         if not target.exists():
@@ -82,8 +84,8 @@ def main(argv=None):
     for command in ("init", "doctor", "tick", "worker"):
         sub.add_parser(command)
     serve = sub.add_parser("serve")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8080)
+    serve.add_argument("--host", default=None)
+    serve.add_argument("--port", type=int, default=None)
     create = sub.add_parser("browser-create-channel")
     create.add_argument("--name", required=True)
     create.add_argument("--description", default="")
@@ -269,8 +271,8 @@ def main(argv=None):
                     raise AgentError("PANEL_SECRET_REQUIRED")
                 uvicorn.run(
                     create_app(service, run_worker=True),
-                    host=args.host,
-                    port=args.port,
+                    host=args.host or service.settings.app["api"].get("host", "127.0.0.1"),
+                    port=args.port or service.settings.app["api"].get("port", 8080),
                     access_log=False,
                 )
             else:
