@@ -50,3 +50,11 @@ details {margin:14px 0} summary {cursor:pointer;color:#bcd4fb} [hidden] {display
 .publication-body {white-space:pre-wrap;overflow-wrap:anywhere}.publication-card img {display:block;max-width:100%;max-height:280px;border-radius:10px;margin:14px 0}
 .publication-card a {display:inline-block;color:#a8c7ff;margin:10px 0}
 @media(max-width:650px) {.publication-facts{grid-template-columns:1fr;gap:4px}.publication-facts dd{margin-bottom:10px}}
+
+/* Кнопки путей и встроенный выбор файлов работают и на узком экране панели. */
+.file-controls {display:flex;gap:6px;flex-wrap:wrap;margin:-5px 0 18px}.file-controls button {font-size:13px;background:#243347;padding:8px 12px}
+.file-link {margin:12px 0;overflow-wrap:anywhere;color:#b4c1d4}.path-link {font-size:13px;background:transparent;border:0;color:#a8c7ff;text-decoration:underline;padding:4px;text-align:left;overflow-wrap:anywhere}
+dialog {color:#e7edf8;background:#192335;border:1px solid #526580;border-radius:16px;width:min(760px,calc(100vw - 56px));max-height:80vh;overflow:auto;padding:22px}
+dialog::backdrop {background:#050b17cc}dialog h2 {margin-top:0}#file-picker-path {overflow-wrap:anywhere;color:#a8c7ff}
+#file-picker-list {display:grid;gap:6px;margin:16px 0}.file-entry {text-align:left;overflow-wrap:anywhere;margin:0;background:#243347}
+#file-picker-feedback {color:#ffc4cd}#settings-paths {border:1px solid #3b4c64;border-radius:10px;padding:18px;margin:18px 0}

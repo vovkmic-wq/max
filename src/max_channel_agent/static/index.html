@@ -82,6 +82,8 @@
     <h3>Сервисы, источники, модели и ограничения</h3><button id="settings-load" data-role="owner">Загрузить все настройки</button>
     <label>Раздел <select id="settings-section"><option value="app">Приложение, MAX, OpenCode и видео</option><option value="topic">Все каналы и редакционные правила</option><option value="sources">Источники редакционных материалов</option><option value="image_sources">Каталог изображений и фильтры</option><option value="image_channels">Локальная модель и отбор каждого канала</option><option value="workflow">Workflow генерации видео</option><option value="holidays">Праздники России, даты и поисковые теги</option></select></label>
     <p id="settings-help" class="hint"></p><textarea id="settings-json" spellcheck="false" aria-label="Настройки выбранного раздела"></textarea>
+    <!-- Пути из выбранного раздела доступны отдельными полями с выбором файла или папки. -->
+    <div id="settings-paths" hidden></div>
     <div class="button-row"><button id="settings-format" data-role="owner">Форматировать JSON</button><button id="settings-validate" data-role="owner">Проверить изменения</button><button id="settings-save" data-role="owner">Сохранить все изменения</button><button id="validate" data-role="owner">Проверить действующие настройки</button><button id="activate" data-role="owner">Применить действующие настройки</button></div>
     <p class="hint">Сохранение полной конфигурации ставит каналы и расписания на паузу. Проверьте подключение, затем включите нужные расписания в календаре. Смена хранилища требует перезапуска проекта.</p>
     <h3>Ключи и переменные окружения</h3><p>Текущие значения не раскрываются. Введите только значения для замены; пустое поле оставляет прежнее значение.</p>
@@ -90,4 +92,11 @@
   <!-- Ответ помогает диагностике; это не поле редактирования поста или настроек. -->
   <details id="response-details"><summary>Последний ответ сервера (JSON, только для просмотра)</summary><p id="response-help" class="hint">Здесь показан служебный результат последней кнопки. state — состояние, section — раздел, records — число записей. Этот блок не меняет публикации и настройки.</p><pre id="result" aria-label="Последний ответ сервера, JSON, только для просмотра" aria-describedby="response-help"></pre></details>
 </main>
+<!-- Выбор внутри проекта доступен даже на виртуальной машине без графического рабочего стола. -->
+<dialog id="file-picker" aria-labelledby="file-picker-title">
+  <h2 id="file-picker-title">Выбор файла в проекте</h2><p id="file-picker-context" class="hint"></p>
+  <p id="file-picker-path"></p><div class="button-row"><button id="file-picker-root" data-role="owner">Корень проекта</button><button id="file-picker-up" data-role="owner">На папку выше</button><button id="file-picker-folder" data-role="owner" hidden>Выбрать эту папку</button><button id="file-picker-close">Отмена</button></div>
+  <p id="file-picker-feedback" role="status" aria-live="polite"></p><div id="file-picker-list"></div>
+  <p class="hint">Нажмите папку для перехода, файл — для выбора. Выбор подставляет путь в поле; применение настроек и публикация выполняются отдельными кнопками.</p>
+</dialog>
 </body></html>

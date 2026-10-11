@@ -276,6 +276,23 @@ def create_app(service, run_worker=False):
             return save_configuration(service, body, validate_only=action == "validate")
         raise AgentError("NOT_FOUND", 404)
 
+    # Выбор файлов ограничен проектом; доступ к рабочему столу получает только локальный владелец.
+    @app.get("/api/v1/files", dependencies=[Depends(owner)])
+    def file_list(path: str = "", purpose: str = "file"):
+        from .panel_files import browse
+        return browse(service, path, purpose)
+
+    @app.post("/api/v1/files/{action}", dependencies=[Depends(owner)])
+    def file_action(action: str, request: Request, body: dict = Body()):
+        from .panel_files import choose, explorer, selected
+        if action == "choose":
+            return choose(service, request, body)
+        if action == "explorer":
+            return explorer(service, request, body)
+        if action == "select":
+            return selected(service, body.get("path", ""), body.get("kind", "file"), body.get("purpose", "file"))
+        raise AgentError("NOT_FOUND", 404)
+
     # Возвращаем доступные профили и их состояния.
     @app.get("/api/v1/channel-profiles", dependencies=[Depends(auth)])
     def channel_profiles():

@@ -23,7 +23,17 @@ const errors = {
   SETTINGS_DOCUMENT_INVALID:"Проверьте структуру JSON настроек.", BACKUP_CONFIG_CONTAINS_SECRET:"Значения ключей вводятся в отдельных полях ниже, а не в JSON настроек.",
   NETWORK_FAILED:"Не удалось связаться с проектом. Проверьте, что он запущен.", SERVER_RESPONSE_INVALID:"Сервер вернул некорректный ответ.",
   SOURCE_DISABLED:"Источник выключен. Включите его в настройках источников.", PANEL_OPERATION_FAILED:"Сервер не завершил операцию. Проверьте состояние проекта и параметры действия.",
-  INPUT_REQUIRED:"Заполните обязательные поля.", INVALID_JSON:"Исправьте JSON перед сохранением.", VIDEO_BACKEND_DISABLED:"Генератор видео ещё не подключён в настройках приложения."
+  INPUT_REQUIRED:"Заполните обязательные поля.", INVALID_JSON:"Исправьте JSON перед сохранением.", VIDEO_BACKEND_DISABLED:"Генератор видео ещё не подключён в настройках приложения.",
+  FILE_PATH_INVALID:"Укажите корректный путь к файлу или папке.", FILE_PATH_FORBIDDEN:"Этот служебный файл недоступен для выбора из панели.",
+  PATH_OUTSIDE_PROJECT:"Путь должен находиться внутри проекта. Внешний файл можно импортировать через «Выбрать файл».",
+  FILE_TYPE_INVALID:"Выберите файл подходящего типа: для видео — MP4, для workflow — JSON.", FILE_PURPOSE_INVALID:"Неизвестный тип выбора файла.",
+  FILE_DIRECTORY_REQUIRED:"Выберите существующую папку проекта.", FILE_KIND_INVALID:"Неверный режим выбора файла.",
+  FILE_DIRECTORY_OUTSIDE_PROJECT:"Папка должна быть внутри проекта, чтобы настройки сохранялись при переносе.",
+  FILE_DIRECTORY_PRIVATE:"Служебная папка не показывается в панели. Локально её можно открыть кнопкой «В Проводнике».",
+  FILE_DIRECTORY_UNAVAILABLE:"Не удалось прочитать папку. Проверьте путь и доступ к ней.", FILE_NOT_FOUND:"Файл или папка ещё не существует.",
+  FILE_TOO_LARGE:"Файл превышает допустимый размер. Для видео действует лимит из настроек проекта.",
+  FILE_DIALOG_BUSY:"Завершите выбор в уже открытом системном диалоге.", FILE_DESKTOP_LOCAL_ONLY:"Проводник доступен при открытии панели на компьютере проекта. Для удалённого доступа используйте «Файлы проекта».",
+  FILE_EXPLORER_UNAVAILABLE:"Проводник доступен в Windows. На сервере используйте встроенный выбор «Файлы проекта»."
 };
 
 // Обратная связь расположена над разделами и остаётся видимой при прокрутке.
@@ -51,7 +61,7 @@ async function api(path, body, key) {
 // Чтение и редактирование имеют разные разрешения; занятая кнопка не отправляет повторный запрос.
 function syncButtons() {
   for (const button of document.querySelectorAll("button")) {
-    if (button.id==="login") {button.disabled=state.busy.has(button);continue;}
+    if (["login","file-picker-close"].includes(button.id)) {button.disabled=state.busy.has(button);continue;}
     if (button.id==="logout") {button.disabled=!state.authenticated || state.busy.has(button);continue;}
     const allowed=!button.dataset.role || button.dataset.role===state.role || (button.dataset.role==="editor" && state.role==="owner");
     button.disabled=!state.authenticated || !allowed || state.busy.has(button);
@@ -61,6 +71,7 @@ function syncButtons() {
 function resetSession() {
   state.authenticated=false; state.role=null; state.profiles=[]; state.settings=null; state.publicationDrafts.clear();
   $("content").replaceChildren(); $("credentials-fields").replaceChildren();
+  if($("file-picker").open){$("file-picker").close();filePicker=null;}
   $("status").textContent="Сессия завершена. Подключитесь к панели."; syncButtons();
 }
 function requireInput(value, message) { if(!String(value).trim())throw fail("INPUT_REQUIRED",message);return String(value).trim(); }
@@ -76,11 +87,15 @@ async function perform(button, task, success) {
     $("result").textContent=JSON.stringify(value===undefined?{state:"done"}:value,null,2);
     notice(typeof success==="function"?success(value):(success || summary(value)),"success");
     return value;
-  } catch(error) {showError(error);return undefined;}
+  } catch(error) {showError(error);if($("file-picker").open)$("file-picker-feedback").textContent=error.message || "Выбор не выполнен.";return undefined;}
   finally {state.busy.delete(button);button.removeAttribute("aria-busy");syncButtons();}
 }
 function bind(id, task, success) {const button=$(id);button.onclick=()=>perform(button,task,success);}
 function summary(value) {
+  if(value && value.state==="selected")return value.imported?"Файл скопирован в проект, путь подставлен в поле.":"Путь подставлен в поле. Сохраните изменения отдельной кнопкой.";
+  if(value && value.state==="cancelled")return "Выбор отменён. Значение поля сохранено.";
+  if(value && value.state==="explorer_opened")return value.directory?"Папка открыта в Проводнике на компьютере проекта.":"Папка открыта в Проводнике на компьютере проекта; выбранный файл выделен.";
+  if(value && value.state==="file_picker_opened")return "Выберите файл или папку в открытом списке проекта.";
   if(value && typeof value.paused==="boolean")return value.paused?"Канал поставлен на паузу.":"Канал возобновлён.";
   if(value && value.queued)return "Задание добавлено в очередь проекта.";
   if(value && value.scheduled)return "Черновик одобрен и добавлен в календарь.";
@@ -178,6 +193,103 @@ function input(card,placeholder,value="",multiline=false) {
   const element=document.createElement(multiline?"textarea":"input");element.placeholder=placeholder;element.value=value;label.append(element);card.append(label);return element;
 }
 
+// Рядом с любым полем пути доступны системный выбор, список проекта и открытие Проводника.
+function fileButton(target,label,task){
+  const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.role="owner";
+  button.onclick=()=>perform(button,task);target.append(button);return button;
+}
+function fileControls(element,{kind="file",purpose="file",onSelect=null}={}){
+  const row=document.createElement("div");row.className="file-controls";element.parentElement.after(row);
+  row.dataset.pathKey=element.dataset.pathKey || element.placeholder;
+  const apply=value=>{element.value=value.path;if(onSelect)onSelect(value);element.dispatchEvent(new Event("change",{bubbles:true}));};
+  const options=()=>({kind,purpose,path:element.value.trim()});
+  fileButton(row,kind==="directory"?"Выбрать папку…":"Выбрать файл…",async()=>{
+    const value=await api("/api/v1/files/choose",options());
+    if(value.state==="selected")apply(value);
+    else if(value.state==="unavailable")return openFilePicker(options(),apply);
+    return value;
+  });
+  fileButton(row,"Файлы проекта",()=>openFilePicker(options(),apply));
+  fileButton(row,"В Проводнике",()=>api("/api/v1/files/explorer",{path:element.value.trim()}));
+  syncButtons();return row;
+}
+
+// Общий диалог запоминает целевое поле; одна и та же навигация обслуживает видео и настройки.
+let filePicker=null;
+async function openFilePicker(options,apply){
+  if($("file-picker").open)throw fail("FILE_DIALOG_BUSY");
+  filePicker={...options,apply};
+  $("file-picker-title").textContent=options.kind==="directory"?"Выбор папки в проекте":"Выбор файла в проекте";
+  $("file-picker-context").textContent=options.purpose==="video"?"Показаны папки и ролики MP4.":options.purpose==="workflow"?"Показаны папки и графы JSON. Граф загрузится вместе с выбранным путём.":options.purpose==="private"?"Выбирается путь к файлу доступа. Его содержимое не выводится в панели.":"Файлы и папки на компьютере, где запущен проект.";
+  $("file-picker-feedback").textContent="";$("file-picker-list").replaceChildren();
+  $("file-picker-folder").hidden=options.kind!=="directory";$("file-picker").showModal();
+  await browseFiles(options.path);return {state:"file_picker_opened"};
+}
+async function browseFiles(path){
+  const value=await api("/api/v1/files?path="+encodeURIComponent(path)+"&purpose="+filePicker.purpose);
+  filePicker.path=value.path;filePicker.parent=value.parent;
+  $("file-picker-path").textContent="Папка проекта: "+(value.path==="."?"корень":value.path);
+  $("file-picker-list").replaceChildren();$("file-picker-feedback").textContent=value.truncated?"Показаны первые 1000 записей. Уточните папку.":"";
+  for(const item of value.entries){
+    // Для выбора папки файлы не показываем; каждый файл выбирается одним нажатием.
+    if(filePicker.kind==="directory" && !item.directory)continue;
+    const button=fileButton($("file-picker-list"),(item.directory?"Папка: ":"Файл: ")+item.name,()=>item.directory?browseFiles(item.path):selectFile(item.path));
+    button.className="file-entry";button.dataset.path=item.path;
+  }
+  if(!$("file-picker-list").children.length){const empty=document.createElement("p");empty.textContent="В этой папке нет подходящих файлов или подпапок.";$("file-picker-list").append(empty);}
+  syncButtons();return {state:"file_picker_opened"};
+}
+async function selectFile(path){
+  const value=await api("/api/v1/files/select",{path,kind:filePicker.kind,purpose:filePicker.purpose});
+  filePicker.apply(value);$("file-picker").close();filePicker=null;return value;
+}
+bind("file-picker-root",()=>browseFiles(""));
+bind("file-picker-up",()=>browseFiles(filePicker.parent || ""));
+bind("file-picker-folder",()=>selectFile(filePicker.path));
+bind("file-picker-close",()=>{$("file-picker").close();filePicker=null;return {state:"cancelled"};});
+$("file-picker").oncancel=()=>{filePicker=null;notice("Выбор отменён. Значение поля сохранено.");};
+
+// Ищем именно локальные пути, сохраняя адреса URL и имена переменных окружения обычным текстом.
+function filePaths(value,prefix=[]){
+  const result=[];
+  if(!value || typeof value!=="object")return result;
+  for(const [key,item] of Object.entries(value)){
+    const keys=prefix.concat(key);
+    if(/^(path|directory)$|_(path|dir)$/.test(key) && (typeof item==="string" || item===null) && !/^\w+:\/\//.test(item || ""))
+      result.push({keys,value:item || "",kind:/^(directory)$|_dir$/.test(key)?"directory":"file",purpose:key==="workflow_path"?"workflow":/access_path$/.test(key)?"private":"file"});
+    else if(item && typeof item==="object")result.push(...filePaths(item,keys));
+  }
+  return result;
+}
+function fileLink(target,path,label="Файл проекта"){
+  if(!path)return;
+  const row=document.createElement("div");row.className="file-link";const text=document.createElement("span");text.textContent=label+": ";row.append(text);
+  const button=fileButton(row,path,()=>api("/api/v1/files/explorer",{path}));button.className="path-link";button.title="Открыть папку и выделить файл в Проводнике на компьютере проекта";target.append(row);
+}
+
+// Поля путей в настройках меняют тот же JSON; выбранный workflow обновляет и граф, и его адрес.
+const pathLabels={topic_path:"Файл тематики каналов",sources_path:"Файл источников",state_dir:"Папка состояния",media_dir:"Папка медиафайлов",logs_dir:"Папка журналов",profile_dir:"Профиль браузера MAX",workflow_path:"Файл workflow ComfyUI",isolated_state_dir:"Данные OpenCode",runtime_dir:"Установка OpenCode",local_access_path:"Файл доступа OpenCode"};
+function settingsPaths(){
+  const target=$("settings-paths");target.replaceChildren();
+  const value=parseJSON($("settings-json").value),paths=filePaths(value);target.hidden=!paths.length;
+  if(!paths.length)return;
+  const heading=document.createElement("h3");heading.textContent="Пути к файлам и папкам";
+  const help=document.createElement("p");help.className="hint";help.textContent="Выбор подставляет относительный путь в настройки. Внешний файл копируется внутрь проекта. «В Проводнике» открывает папку на компьютере проекта.";target.append(heading,help);
+  for(const item of paths){
+    const key=item.keys[item.keys.length-1],field=input(target,(pathLabels[key] || "Путь")+" ("+state.section+"."+item.keys.join(".")+")",item.value);
+    field.dataset.pathKey=item.keys.join(".");
+    const apply=selected=>{
+      const documentValue=parseJSON($("settings-json").value);let parent=documentValue;
+      for(const part of item.keys.slice(0,-1))parent=parent[part];
+      parent[key]=selected.path || (item.purpose==="workflow"?null:"");
+      $("settings-json").value=JSON.stringify(documentValue,null,2);state.settings[state.section]=documentValue;
+      if(item.purpose==="workflow" && selected.document)state.settings.workflow=selected.document;
+      if(item.purpose==="workflow" && !selected.path)state.settings.workflow=null;
+    };
+    field.onchange=()=>apply({path:field.value.trim()});fileControls(field,{kind:item.kind,purpose:item.purpose,onSelect:apply});
+  }
+}
+
 // Состояние отправки переводим отдельно от данных сервера: исходные значения остаются в журнале.
 const publicationStates={
   confirmed:["Опубликовано","Проект подтвердил появление поста в канале MAX."],
@@ -256,11 +368,13 @@ function renderPublication(card,row){
     image.src="/api/v1/drafts/"+encodeURIComponent(row.draft_id)+"/image";
     image.onerror=()=>{image.hidden=true;const hint=document.createElement("p");hint.className="hint";hint.textContent="Локальный файл предпросмотра недоступен. Состояние отправки показано выше.";media.append(hint);};
     media.append(title,image);card.append(media);
+    fileLink(card,current.image.path,"Сохранённое изображение");
   }
   if(current.body){
     const text=document.createElement("details"),title=document.createElement("summary"),body=document.createElement("p");
     title.textContent="Текущий текст поста";body.className="publication-body";body.textContent=current.body;text.append(title,body);card.append(text);
   }
+  if(current.video)fileLink(card,current.video.path,"Сохранённое видео");
   // Адрес канала берём из подключённого профиля; он работает и без прямой ссылки на пост.
   if(channel && /^-?\d+$/.test(channel.chat_id || "")){
     const link=document.createElement("a");link.textContent="Открыть канал в MAX";link.href="https://web.max.ru/"+channel.chat_id;link.target="_blank";link.rel="noopener noreferrer";card.append(link);
@@ -270,12 +384,14 @@ function renderCard(row) {
   const card=document.createElement("article");card.className="card";
   if(state.tab==="publications")renderPublication(card,row);
   recordDetails(card,row);
+  if(state.tab!=="publications")for(const item of filePaths(row).slice(0,30))fileLink(card,item.value,item.keys.join("."));
   if(state.tab==="sources")cardButton(card,"Собрать источник",()=>api("/api/v1/sources/"+row.id+"/collect",{}));
   if(state.tab==="videos"){
     for(const pair of [["approve-generation","Одобрить генерацию"],["poll","Проверить результат"],["assemble","Собрать ролик"],["cancel","Остановить проект"]])
       cardButton(card,pair[1],()=>api("/api/v1/videos/"+row.id+"/"+pair[0],{revision:row.revision,plan_hash:row.plan_hash}));
     const index=input(card,"Номер сцены","0");index.type="number";index.min="0";
     const path=input(card,"Путь готовой сцены"),rights=input(card,"Права на сцену");
+    fileControls(path,{purpose:"video"});
     cardButton(card,"Импортировать готовую сцену",()=>api("/api/v1/videos/"+row.id+"/import-scene",{index:Number(index.value),path:requireInput(path.value,"Укажите путь сцены."),rights_basis:requireInput(rights.value,"Укажите права на сцену.")}));
   }
   if(state.tab==="source-media"){
@@ -299,6 +415,7 @@ function renderCard(row) {
   }
   if(state.tab==="drafts" && row.state!=="published"){
     const path=input(card,"Путь MP4"),rights=input(card,"Основание права на публикацию");
+    fileControls(path,{purpose:"video"});
     cardButton(card,"Приложить MP4",()=>api("/api/v1/drafts/"+row.id+"/video",{path:requireInput(path.value,"Укажите путь MP4."),rights_basis:requireInput(rights.value,"Укажите права на видео.")}));
     cardButton(card,row.commercial?"Снять коммерческую отметку":"Коммерческий материал",()=>api("/api/v1/drafts/"+row.id+"/commercial",{revision:row.revision,commercial:!row.commercial}),"editor");
     const body=input(card,"Текст черновика",row.current.body,true);
@@ -426,7 +543,8 @@ bind("channel-apply",async()=>{const value=parseJSON($("channel-profile-json").v
 // Настройки сохраняются цельным проверяемым документом; переход между разделами не теряет правки.
 const sectionHelp={app:"Адаптер MAX, разрешённые адресаты браузера, локальные сервисы, OpenCode, видео, бюджеты и пути установки.",topic:"Темы, аудитории, рубрики, ограничения, язык и правила всех каналов.",sources:"Источники редакции, интервалы сбора и основания прав.",image_sources:"Бесплатные сайты, поисковые запросы и общие пороги просмотров, лайков и размеров.",image_channels:"Описания локальной CLIP, персональные фильтры, темы и расписания.",workflow:"Граф ComfyUI; путь задаётся в app.video.workflow_path. null означает, что граф не выбран.",holidays:"Названия, даты, дополнительные теги и подтверждённые ежегодные правила. Каталог можно дополнить или отключить праздничный поиск."};
 function storeSection(){if(!state.settings)throw fail("INPUT_REQUIRED","Сначала загрузите настройки.");state.settings[state.section]=parseJSON($("settings-json").value);}
-function displaySection(){state.section=$("settings-section").value;$("settings-json").value=JSON.stringify(state.settings[state.section],null,2);$("settings-help").textContent=sectionHelp[state.section] || "";}
+function displaySection(){state.section=$("settings-section").value;$("settings-json").value=JSON.stringify(state.settings[state.section],null,2);$("settings-help").textContent=sectionHelp[state.section] || "";settingsPaths();}
+$("settings-json").onchange=()=>{try{settingsPaths();}catch(error){showError(error);}};
 async function loadSettings(){
   const value=await api("/api/v1/settings");state.settings=value.configuration;displaySection();
   $("credentials-fields").replaceChildren();

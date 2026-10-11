@@ -1,12 +1,14 @@
 """Проверка всех кнопок в настоящем Chrome с изолированной базой и тестовыми адаптерами."""
 
 from urllib.parse import urlsplit
+import json
 
 import pytest
 from fastapi.testclient import TestClient
 from playwright.sync_api import sync_playwright, expect
 
 from max_channel_agent import image_pipeline, image_schedule, holidays, browser_corrections
+from max_channel_agent import panel_files
 from max_channel_agent.api import create_app
 from max_channel_agent.config import fingerprint
 from max_channel_agent.db import Draft, Intent, MaterialMedia, VideoAsset, VideoProject
@@ -125,6 +127,63 @@ def test_publications_have_russian_labels_and_readonly_comments(panel_browser):
     click(page, "[data-tab='sources']")
     expect(page.locator("#publications-help")).not_to_be_visible()
     expect(page.locator("#content summary").first).to_have_text("Состояние источника (JSON)")
+    assert not errors
+
+
+# Выбор файла, отмена и список проекта подставляют путь; workflow сохраняется вместе с выбранным графом.
+def test_file_controls_select_cancel_browse_and_update_workflow(panel_browser, monkeypatch):
+    page, service, seen, errors = panel_browser
+    root = service.settings.root
+    workflow = root / "config/новый workflow.json"
+    workflow.write_text('{"1":{"class_type":"Example","inputs":{}}}', encoding="utf-8")
+    monkeypatch.setattr(panel_files, "local_client", lambda request: True)
+    monkeypatch.setattr(panel_files, "native_pick", lambda *args: {"state": "selected", "path": str(root / "fixture.mp4")})
+    monkeypatch.setattr(panel_files, "explorer", lambda *args: {"state": "explorer_opened", "path": "fixture.mp4"})
+    login(page)
+    click(page, "[data-tab='drafts']")
+    control = page.locator(".file-controls[data-path-key='Путь MP4']")
+    control.get_by_role("button", name="Выбрать файл…", exact=True).click()
+    expect(page.get_by_label("Путь MP4", exact=True)).to_have_value("fixture.mp4")
+    expect(page.locator("#feedback")).to_have_attribute("data-state", "success")
+    monkeypatch.setattr(panel_files, "native_pick", lambda *args: {"state": "cancelled"})
+    control.get_by_role("button", name="Выбрать файл…", exact=True).click()
+    expect(page.locator("#feedback")).to_contain_text("Выбор отменён")
+    expect(page.get_by_label("Путь MP4", exact=True)).to_have_value("fixture.mp4")
+    control.get_by_role("button", name="В Проводнике", exact=True).click()
+    expect(page.locator("#feedback")).to_contain_text("Папка открыта в Проводнике")
+    # Встроенный список не требует диалога Windows и работает на удалённой виртуальной машине.
+    control.get_by_role("button", name="Файлы проекта", exact=True).click()
+    expect(page.locator("#file-picker")).to_be_visible()
+    page.locator("#file-picker").get_by_role("button", name="Папка: config", exact=True).click()
+    expect(page.locator("#file-picker-path")).to_contain_text("config")
+    click(page, "#file-picker-up")
+    page.locator("#file-picker").get_by_role("button", name="Файл: fixture.mp4", exact=True).click()
+    expect(page.locator("#file-picker")).not_to_be_visible()
+    expect(page.get_by_label("Путь MP4", exact=True)).to_have_value("fixture.mp4")
+    # Если рабочий стол недоступен, обычная кнопка выбора открывает встроенный список.
+    monkeypatch.setattr(panel_files, "local_client", lambda request: False)
+    control.get_by_role("button", name="Выбрать файл…", exact=True).click()
+    expect(page.locator("#file-picker")).to_be_visible()
+    click(page, "#file-picker-close")
+    expect(page.get_by_label("Путь MP4", exact=True)).to_have_value("fixture.mp4")
+    monkeypatch.setattr(panel_files, "local_client", lambda request: True)
+    click(page, "#settings-tab")
+    monkeypatch.setattr(panel_files, "native_pick", lambda *args: {"state": "selected", "path": str(workflow)})
+    control = page.locator(".file-controls[data-path-key='video.workflow_path']")
+    control.get_by_role("button", name="Выбрать файл…", exact=True).click()
+    expect(page.locator("input[data-path-key='video.workflow_path']")).to_have_value("config/новый workflow.json")
+    click(page, "#settings-validate")
+    sent = [body for method, path, body in seen if path == "/api/v1/settings/validate"][-1]
+    assert sent["workflow"]["1"]["class_type"] == "Example"
+    assert sent["app"]["video"]["workflow_path"] == "config/новый workflow.json"
+    # Выбор папки изменяет только поле JSON; применение конфигурации выполняется отдельно.
+    control = page.locator(".file-controls[data-path-key='media_dir']")
+    control.get_by_role("button", name="Файлы проекта", exact=True).click()
+    click(page, "#file-picker-root")
+    click(page, "#file-picker-folder")
+    expect(page.locator("#file-picker")).not_to_be_visible()
+    assert json.loads(page.locator("#settings-json").input_value())["media_dir"] == "."
+    assert not [item for item in seen if item[1].endswith("/settings/save") or item[1].endswith("/video")]
     assert not errors
 
 
