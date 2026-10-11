@@ -36,3 +36,17 @@ details {margin:14px 0} summary {cursor:pointer;color:#bcd4fb} [hidden] {display
 
 /* Праздничные теги отделены от фактических публикаций и видны в соответствующем дне. */
 .holiday-tag {font-size:11px;color:#ffdb94;background:#43351f;padding:6px;border-radius:6px;margin:5px 0}.calendar-event small{display:block;font-size:10px;color:#e5d3a3;margin-top:5px}
+
+/* Историю отправок читают как карточки постов; код с пояснениями раскрывают при необходимости. */
+.section-help {border-left:3px solid #8ab5fb;padding:1px 16px;margin:12px 0 22px;background:#13223a;border-radius:8px}
+.section-help h3,.publication-card h3 {margin:10px 0 14px}
+.publication-card {border-left:4px solid #8ab5fb}.publication-card[data-state="confirmed"] {border-left-color:#65bd9c}
+.publication-card[data-state="rejected"] {border-left-color:#e58e99}.publication-card[data-state="unknown"],.publication-card[data-state="sending"] {border-left-color:#e9bf72}
+.publication-state {display:inline-block;border:1px solid #557599;border-radius:20px;padding:5px 12px;background:#233c5c}
+.publication-card[data-state="confirmed"] .publication-state {color:#a7e5cc;background:#1d4238;border-color:#4c9279}
+.publication-card[data-state="rejected"] .publication-state {color:#ffc4cd;background:#48212a;border-color:#bd586b}
+.publication-facts {display:grid;grid-template-columns:140px minmax(0,1fr);gap:8px 16px;margin:18px 0}
+.publication-facts dt {color:#b4c1d4}.publication-facts dd {margin:0;overflow-wrap:anywhere}
+.publication-body {white-space:pre-wrap;overflow-wrap:anywhere}.publication-card img {display:block;max-width:100%;max-height:280px;border-radius:10px;margin:14px 0}
+.publication-card a {display:inline-block;color:#a8c7ff;margin:10px 0}
+@media(max-width:650px) {.publication-facts{grid-template-columns:1fr;gap:4px}.publication-facts dd{margin-bottom:10px}}

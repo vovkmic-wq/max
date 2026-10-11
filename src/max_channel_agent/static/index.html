@@ -24,7 +24,13 @@
     <button data-tab="audit">Журнал</button><button id="settings-tab" data-view="settings" data-role="owner">Настройки</button>
   </nav>
   <div id="workspace-panel">
-    <section><div class="section-heading"><h2 id="heading">Каналы</h2><button id="refresh">Обновить</button></div><div id="content"></div></section>
+    <section><div class="section-heading"><h2 id="heading">Каналы</h2><button id="refresh">Обновить</button></div>
+      <!-- Пояснение истории отправок видно только на вкладке публикаций. -->
+      <div id="publications-help" class="section-help" hidden><h3>История отправок в MAX</h3>
+        <p>Каждая карточка — отдельная попытка отправки. «Опубликовано» означает, что проект подтвердил появление поста в канале. «Отправка отклонена» означает, что эта попытка не завершилась публикацией.</p>
+        <p>Свежие записи находятся сверху. Если результат неизвестен, используйте «Сверить результат»: проект проверит существующую отправку. Будущие публикации находятся во вкладке «Календарь».</p>
+        <p id="publications-count" class="hint"></p>
+      </div><div id="content"></div></section>
     <!-- Один выбранный профиль задаёт адресат для подключения, видео и браузера. -->
     <section><h2>Управление каналом</h2><div class="form-row">
       <label>Канал <select id="channel"></select></label><label>Адрес канала MAX (chat_id) <input id="chat" placeholder="-123456789"></label>
@@ -37,10 +43,11 @@
       <label>Канал изображений <select id="image-channel"></select></label>
       <div class="button-row"><button id="images-status">Состояние и топ‑10</button><button id="images-scan" data-role="owner">Собрать все источники без отправки</button><button id="images-pause" data-role="owner">Остановить расписание</button><button id="images-resume" data-role="owner">Включить расписание</button><button id="images-tick" data-role="owner">Проверить текущий интервал</button></div>
       <p class="hint">Дни и часы отправки меняются в разделе «Календарь».</p>
-      <details><summary>Данные последней проверки</summary><pre id="images-result"></pre></details>
+      <details><summary>Данные последней проверки изображений (JSON)</summary><p class="hint">Служебный ответ: schedule — расписание, top — выбранные изображения, state — результат операции. Только для просмотра.</p><pre id="images-result" aria-label="Данные проверки изображений, JSON, только для просмотра"></pre></details>
     </section>
     <section><h2>Собственный ролик</h2><label>Идея <input id="video-idea" placeholder="Путешествие бумажного кораблика"></label><button id="generate-plan" data-role="owner">Создать сценарий через OpenCode</button>
-      <label>Сценарий JSON <textarea id="video-plan">{"title":"Нейровидео","caption":"Короткая визуальная история для нашего канала.","rights_basis":"Собственные сценарий и материалы с правом публикации","scenes":[{"prompt":"A paper boat floating through a cinematic miniature ocean","negative_prompt":"artifacts, flicker","duration_seconds":5}]}</textarea></label>
+      <label>Сценарий ролика — редактируемый JSON <textarea id="video-plan" aria-describedby="video-plan-help">{"title":"Нейровидео","caption":"Короткая визуальная история для нашего канала.","rights_basis":"Собственные сценарий и материалы с правом публикации","scenes":[{"prompt":"A paper boat floating through a cinematic miniature ocean","negative_prompt":"artifacts, flicker","duration_seconds":5}]}</textarea></label>
+      <p id="video-plan-help" class="hint">title — название, caption — подпись поста, rights_basis — основание прав, scenes — сцены. В сцене prompt описывает кадр, negative_prompt — что исключить, duration_seconds — длительность в секундах. Пояснения находятся рядом: внутри редактируемого JSON комментарии не допускаются.</p>
       <button id="create-plan" data-role="owner">Сохранить сценарий</button>
     </section>
   </div>
@@ -80,6 +87,7 @@
     <h3>Ключи и переменные окружения</h3><p>Текущие значения не раскрываются. Введите только значения для замены; пустое поле оставляет прежнее значение.</p>
     <div id="credentials-fields"></div><button id="credentials-save" data-role="owner">Сохранить новые ключи</button>
   </section>
-  <details id="response-details"><summary>Последний ответ сервера</summary><pre id="result"></pre></details>
+  <!-- Ответ помогает диагностике; это не поле редактирования поста или настроек. -->
+  <details id="response-details"><summary>Последний ответ сервера (JSON, только для просмотра)</summary><p id="response-help" class="hint">Здесь показан служебный результат последней кнопки. state — состояние, section — раздел, records — число записей. Этот блок не меняет публикации и настройки.</p><pre id="result" aria-label="Последний ответ сервера, JSON, только для просмотра" aria-describedby="response-help"></pre></details>
 </main>
 </body></html>

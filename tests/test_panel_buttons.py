@@ -84,6 +84,50 @@ def login(page, role="owner"):
     expect(page.locator("#status")).to_contain_text("Подключено")
 
 
+# Читаемая история отличает посты от неудачных попыток, переводит даты и сохраняет пояснения к коду.
+def test_publications_have_russian_labels_and_readonly_comments(panel_browser):
+    page, service, seen, errors = panel_browser
+    with service.db.session.begin() as db:
+        db.add(Draft(id="draft-readable", channel_id="test", story_id="story-readable", state="published",
+                     current={"title": "Проверка понятной карточки", "body": "Текст <script>не исполняется</script>"}, config_id=service.settings.hash))
+        db.add(Intent(id="intent-readable", draft_id="draft-readable", channel_id="test", state="confirmed",
+                      body_hash="h", send_started_at=1791738042, published_at=1791738051))
+        # Отсутствующий черновик не должен превращать отклонённую отправку в опубликованный пост.
+        db.add(Intent(id="intent-rejected", draft_id="missing-draft", channel_id="test", state="rejected",
+                      body_hash="h", send_started_at=1791738000))
+        db.add(Intent(id="intent-unknown-readable", draft_id="draft-unknown", channel_id="test", state="unknown",
+                      body_hash="h", send_started_at=1791737990))
+    login(page)
+    click(page, "[data-tab='publications']")
+    expect(page.locator("#publications-help")).to_be_visible()
+    expect(page.locator("#publications-count")).to_contain_text("Опубликовано: 2 · Отклонено: 1")
+    card = page.locator(".publication-card").first
+    expect(card.get_by_role("heading")).to_have_text("Проверка понятной карточки")
+    expect(card.locator(".publication-state")).to_have_text("Опубликовано")
+    expect(card.locator(".publication-facts")).to_contain_text("Нейровидео — тест MAX")
+    expect(card.locator(".publication-facts")).to_contain_text("11.10.2026, 20:00:51 · Europe/Moscow")
+    expect(card.get_by_role("link", name="Открыть канал в MAX")).to_have_attribute("href", "https://web.max.ru/-123")
+    expect(card.locator("pre")).not_to_be_visible()
+    card.locator("summary").filter(has_text="Текущий текст поста").click()
+    expect(card.locator(".publication-body")).to_have_text("Текст <script>не исполняется</script>")
+    expect(card.locator("script")).to_have_count(0)
+    card.locator("summary").filter(has_text="Техническая запись отправки").click()
+    expect(card.locator("pre")).to_be_visible()
+    expect(card.locator("pre")).to_contain_text("// Номер попытки отправки (intent_id)")
+    expect(card.locator("pre")).to_contain_text("// Когда началась отправка")
+    rejected = page.locator(".publication-card[data-state='rejected']")
+    expect(rejected.locator(".publication-state")).to_have_text("Отправка отклонена")
+    expect(rejected.locator(".publication-facts")).to_contain_text("Черновик недоступен")
+    expect(rejected.get_by_role("button", name="Сверить результат")).to_have_count(0)
+    expect(page.locator(".publication-card[data-state='unknown']").get_by_role("button", name="Сверить результат")).to_be_visible()
+    # Чтение карточек, комментариев и подписи не вызывает ни одной отправки или правки.
+    assert not [item for item in seen if item[0] == "POST" and item[1] != "/api/v1/session/login"]
+    click(page, "[data-tab='sources']")
+    expect(page.locator("#publications-help")).not_to_be_visible()
+    expect(page.locator("#content summary").first).to_have_text("Состояние источника (JSON)")
+    assert not errors
+
+
 # Все статические кнопки дают результат; повторное подключение и reload сохраняют вход.
 def test_all_static_panel_buttons(panel_browser):
     page, service, seen, errors = panel_browser
@@ -108,6 +152,8 @@ def test_all_static_panel_buttons(panel_browser):
     expect(page.locator("#feedback")).to_have_attribute("data-state", "success")
     click(page, "#calendar-tab")
     expect(page.locator(".calendar-day")).to_have_count(7)
+    # На исходе воскресенья текущая неделя может не содержать будущих событий.
+    click(page, "#calendar-next")
     page.locator(".calendar-event").first.click()
     expect(page.locator("#calendar-detail")).to_be_visible()
     for button_id in ("calendar-prev", "calendar-next", "calendar-today", "calendar-refresh", "holidays-toggle", "holidays-update"):

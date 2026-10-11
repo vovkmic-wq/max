@@ -1,7 +1,7 @@
 "use strict";
 
 // Состояние содержит только роль и настройки интерфейса; ключ не сохраняется в JavaScript.
-const state = {authenticated:false, role:null, tab:"channels", view:"workspace", profiles:[], busy:new Set(), settings:null, section:"app", calendar:null};
+const state = {authenticated:false, role:null, tab:"channels", view:"workspace", profiles:[], busy:new Set(), settings:null, section:"app", calendar:null, publicationDrafts:new Map()};
 const $ = id => document.getElementById(id);
 const roles = {owner:"владелец",editor:"редактор",viewer:"наблюдатель"};
 const errors = {
@@ -59,7 +59,7 @@ function syncButtons() {
   }
 }
 function resetSession() {
-  state.authenticated=false; state.role=null; state.profiles=[]; state.settings=null;
+  state.authenticated=false; state.role=null; state.profiles=[]; state.settings=null; state.publicationDrafts.clear();
   $("content").replaceChildren(); $("credentials-fields").replaceChildren();
   $("status").textContent="Сессия завершена. Подключитесь к панели."; syncButtons();
 }
@@ -138,11 +138,26 @@ $("channel").onchange=selectChannel;
 function selectView(view) {
   state.view=view;
   $("workspace-panel").hidden=view!=="workspace";$("calendar-panel").hidden=view!=="calendar";$("settings-panel").hidden=view!=="settings";
+  $("publications-help").hidden=view!=="workspace" || state.tab!=="publications";
   for(const button of document.querySelectorAll("#tabs button"))button.classList.toggle("active",button.dataset.tab===state.tab && view==="workspace" || button.dataset.view===view);
 }
 async function refresh() {
+  const tab=state.tab;
   $("content").replaceChildren();
-  const rows=await api("/api/v1/"+state.tab);
+  $("publications-count").textContent="";
+  let rows;
+  // Черновики добавляют читаемый текст к журналу отправок; оба запроса только читают данные.
+  if(tab==="publications"){
+    const result=await Promise.all([api("/api/v1/publications"),api("/api/v1/drafts")]);
+    // Медленный ответ прежней вкладки не должен заменить содержимое уже выбранного раздела.
+    if(state.tab!==tab || state.view!=="workspace")return {section:tab};
+    rows=result[0];state.publicationDrafts=new Map(result[1].map(draft=>[draft.id,draft]));
+    // Сначала показываем последние попытки, независимо от того, удалась отправка или нет.
+    rows.sort((a,b)=>(b.send_started_at || b.published_at || 0)-(a.send_started_at || a.published_at || 0));
+    const confirmed=rows.filter(row=>row.state==="confirmed").length, rejected=rows.filter(row=>row.state==="rejected").length;
+    $("publications-count").textContent="Всего попыток: "+rows.length+" · Опубликовано: "+confirmed+" · Отклонено: "+rejected+" · В процессе или требуют проверки: "+(rows.length-confirmed-rejected)+". Показана история всех каналов.";
+  }else rows=await api("/api/v1/"+tab);
+  if(state.tab!==tab || state.view!=="workspace")return {section:tab};
   if(!rows.length){const empty=document.createElement("p");empty.className="empty";empty.textContent="В этом разделе пока нет записей.";$("content").append(empty);}
   for(const row of rows)renderCard(row);
   syncButtons();return {section:state.tab,records:rows.length};
@@ -158,11 +173,103 @@ function cardButton(card,label,task,role="owner",refreshAfter=true) {
   button.onclick=()=>perform(button,async()=>{const value=await task();if(refreshAfter)await refresh();return value;});card.append(button);return button;
 }
 function input(card,placeholder,value="",multiline=false) {
-  const element=document.createElement(multiline?"textarea":"input");element.placeholder=placeholder;element.setAttribute("aria-label",placeholder);element.value=value;card.append(element);return element;
+  // Подпись остаётся видимой после ввода текста, когда подсказка внутри поля исчезает.
+  const label=document.createElement("label");label.textContent=placeholder;
+  const element=document.createElement(multiline?"textarea":"input");element.placeholder=placeholder;element.value=value;label.append(element);card.append(label);return element;
+}
+
+// Состояние отправки переводим отдельно от данных сервера: исходные значения остаются в журнале.
+const publicationStates={
+  confirmed:["Опубликовано","Проект подтвердил появление поста в канале MAX."],
+  rejected:["Отправка отклонена","Эта попытка не завершилась публикацией. Причину можно проверить в журнале проекта."],
+  pending:["Ожидает отправки","Запись отправки создана, подтверждения публикации пока нет."],
+  sending:["Отправляется","Отправка началась, итог ещё не подтверждён. Сверка проверяет её результат без повторной отправки."],
+  unknown:["Результат неизвестен","Пост мог появиться в MAX. Сверьте результат, прежде чем предпринимать новую отправку."],
+  retry_wait:["Ожидает повторной попытки","Публикация не подтверждена; дальнейший запуск зависит от расписания и правил проекта."]
+};
+
+// Комментарии добавляем только к отображаемой служебной записи, а не к редактируемому JSON.
+const publicationFields={
+  id:"Номер попытки отправки (intent_id); нужен при проверке результата.",
+  draft_id:"Номер связанного черновика: откуда взяты текст и вложение.",
+  channel_id:"Профиль канала в проекте; его название показано на карточке.",
+  state:"Результат: confirmed — опубликовано, rejected — отклонено, unknown — неизвестен, sending — отправляется, pending — ожидает, retry_wait — ожидание повторной попытки.",
+  external_id:"Служебный идентификатор сообщения или браузерной отправки; не обязательно ссылка на пост.",
+  permalink:"Прямая ссылка на пост, если MAX её вернул; null означает, что ссылки нет.",
+  send_started_at:"Когда началась отправка: секунды от 01.01.1970 UTC. Читаемая дата показана выше.",
+  published_at:"Время подтверждения публикации в секундах от 01.01.1970 UTC; null — подтверждения нет.",
+  body_hash:"Контрольный отпечаток текста при отправке: помогает обнаруживать изменения.",
+  retry_after:"Служебная отметка времени ограничения повторной попытки; не расписание следующего поста."
+};
+function publicationCode(row){
+  const lines=["{"];const entries=Object.entries(row);
+  entries.forEach(([key,value],index)=>{
+    lines.push("  // "+(publicationFields[key] || "Дополнительное служебное поле."));
+    lines.push("  "+JSON.stringify(key)+": "+JSON.stringify(value)+(index<entries.length-1?",":""));
+  });
+  return lines.concat("}").join("\n");
+}
+
+// Любое окно с кодом имеет подпись и назначение; журнал отправки по умолчанию свёрнут.
+const dataTitles={channels:"Данные профиля канала",sources:"Состояние источника",videos:"Данные видеопроекта",assets:"Данные готового видео",drafts:"Данные черновика","source-media":"Данные исходного материала",jobs:"Данные фонового задания",campaigns:"Данные продвижения",audit:"Запись журнала"};
+function recordDetails(card,row){
+  const publication=state.tab==="publications";
+  const details=document.createElement("details"), title=document.createElement("summary");
+  details.open=!publication;
+  title.textContent=publication?"Техническая запись отправки — JSON с русскими комментариями":(dataTitles[state.tab] || "Данные записи")+" (JSON)";
+  const help=document.createElement("p");help.className="hint";
+  help.textContent=publication?"Только для просмотра. Строки // объясняют каждое поле; null означает отсутствие значения. Это служебная запись, её не нужно редактировать или вставлять в настройки.":"Только для просмотра. id — номер записи, state/status — состояние, channel_id — профиль канала. Действия выполняются кнопками, а не правкой этого блока.";
+  const data=document.createElement("pre");data.setAttribute("aria-label",title.textContent+", только для просмотра");
+  data.textContent=publication?publicationCode(row):JSON.stringify(row,null,2);
+  details.append(title,help,data);card.append(details);
+}
+
+// Даты отображаем в часовом поясе профиля канала, а не компьютера, где открыт браузер.
+function publicationDate(stamp,zone){
+  if(!stamp)return "Не зафиксировано";
+  const date=new Date(stamp*1000);if(!Number.isFinite(date.getTime()))return "Некорректная дата";
+  return date.toLocaleString("ru-RU",{timeZone:zone})+" · "+zone;
+}
+function publicationFact(target,label,value){
+  const term=document.createElement("dt"),description=document.createElement("dd");
+  term.textContent=label;description.textContent=value;target.append(term,description);
+}
+
+// Карточка показывает текущий текст связанного поста; история отправки сохраняет исходный отпечаток.
+function renderPublication(card,row){
+  const draft=state.publicationDrafts.get(row.draft_id), current=draft && draft.current || {};
+  const channel=state.profiles.find(item=>item.channel.id===row.channel_id);
+  const zone=channel?channel.channel.publication.timezone:"Europe/Moscow";
+  const status=publicationStates[row.state] || ["Неизвестное состояние","Проверьте техническую запись и журнал проекта."];
+  card.classList.add("publication-card");card.dataset.state=row.state;
+  const heading=document.createElement("h3");heading.textContent=current.title || "Публикация без заголовка";
+  const badge=document.createElement("span");badge.className="publication-state";badge.textContent=status[0];card.append(heading,badge);
+  const facts=document.createElement("dl");facts.className="publication-facts";
+  publicationFact(facts,"Канал",channel?channel.channel.name:row.channel_id);
+  publicationFact(facts,row.state==="confirmed"?"Опубликовано":"Начало попытки",publicationDate(row.state==="confirmed"?row.published_at:row.send_started_at,zone));
+  publicationFact(facts,"Материал",current.image?"Изображение с подписью":current.video?"Видео с подписью":draft?"Текстовый пост":"Черновик недоступен");card.append(facts);
+  const explanation=document.createElement("p");explanation.className="hint";explanation.textContent=status[1];card.append(explanation);
+  // Предпросмотр читает уже сохранённый файл через защищённый маршрут; отправки он не запускает.
+  if(current.image){
+    const media=document.createElement("details"),title=document.createElement("summary"),image=document.createElement("img");
+    title.textContent="Изображение публикации";image.alt="Сохранённое изображение: "+heading.textContent;image.loading="lazy";
+    image.src="/api/v1/drafts/"+encodeURIComponent(row.draft_id)+"/image";
+    image.onerror=()=>{image.hidden=true;const hint=document.createElement("p");hint.className="hint";hint.textContent="Локальный файл предпросмотра недоступен. Состояние отправки показано выше.";media.append(hint);};
+    media.append(title,image);card.append(media);
+  }
+  if(current.body){
+    const text=document.createElement("details"),title=document.createElement("summary"),body=document.createElement("p");
+    title.textContent="Текущий текст поста";body.className="publication-body";body.textContent=current.body;text.append(title,body);card.append(text);
+  }
+  // Адрес канала берём из подключённого профиля; он работает и без прямой ссылки на пост.
+  if(channel && /^-?\d+$/.test(channel.chat_id || "")){
+    const link=document.createElement("a");link.textContent="Открыть канал в MAX";link.href="https://web.max.ru/"+channel.chat_id;link.target="_blank";link.rel="noopener noreferrer";card.append(link);
+  }
 }
 function renderCard(row) {
   const card=document.createElement("article");card.className="card";
-  const data=document.createElement("pre");data.textContent=JSON.stringify(row,null,2);card.append(data);
+  if(state.tab==="publications")renderPublication(card,row);
+  recordDetails(card,row);
   if(state.tab==="sources")cardButton(card,"Собрать источник",()=>api("/api/v1/sources/"+row.id+"/collect",{}));
   if(state.tab==="videos"){
     for(const pair of [["approve-generation","Одобрить генерацию"],["poll","Проверить результат"],["assemble","Собрать ролик"],["cancel","Остановить проект"]])
