@@ -1,0 +1,144 @@
+{
+  "checked_at": "2026-10-06T23:55:35.098193+03:00",
+  "proxmox": {
+    "host": "10.20.30.142",
+    "container_id": 111,
+    "hostname": "max-comfyui",
+    "unprivileged": true,
+    "cores": 2,
+    "memory_mb": 4096,
+    "swap_mb": 1024,
+    "disk_gb": 40,
+    "container_onboot": true
+  },
+  "service": {
+    "name": "max-comfyui.service",
+    "enabled": true,
+    "active": true,
+    "restart_verified": true,
+    "pid_before_restart": 232,
+    "pid_after_restart": 450,
+    "dependency_check": "passed"
+  },
+  "access": {
+    "port": 8188,
+    "allowed_ipv4": [
+      "10.20.30.93",
+      "10.20.30.142",
+      "10.77.0.2"
+    ],
+    "other_clients_rejected": true,
+    "custom_nodes_disabled": true
+  },
+  "comfyui": {
+    "url": "http://10.20.30.82:8188",
+    "ai_generation_verified": false,
+    "system": {
+      "system": {
+        "os": "linux",
+        "ram_total": 4294967296,
+        "ram_free": 3808899072,
+        "comfyui_version": "0.39.0",
+        "required_frontend_version": "1.53.10",
+        "installed_templates_version": "0.11.76",
+        "required_templates_version": "0.11.76",
+        "comfy_package_versions": [
+          {
+            "name": "comfyui-frontend-package",
+            "installed": "1.53.10",
+            "required": "1.53.10"
+          },
+          {
+            "name": "comfyui-workflow-templates",
+            "installed": "0.11.76",
+            "required": "0.11.76"
+          },
+          {
+            "name": "comfyui-embedded-docs",
+            "installed": "0.5.13",
+            "required": "0.5.13"
+          },
+          {
+            "name": "comfy-kitchen",
+            "installed": "0.2.37",
+            "required": "0.2.37"
+          },
+          {
+            "name": "comfy-aimdo",
+            "installed": "0.5.5",
+            "required": "0.5.5"
+          }
+        ],
+        "python_version": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+        "pytorch_version": "2.14.1+cpu",
+        "embedded_python": false,
+        "deploy_environment": "local-git",
+        "argv": [
+          "main.py",
+          "--cpu",
+          "--listen",
+          "0.0.0.0",
+          "--port",
+          "8188",
+          "--disable-auto-launch",
+          "--disable-all-custom-nodes"
+        ]
+      },
+      "devices": [
+        {
+          "name": "cpu",
+          "type": "cpu",
+          "index": null,
+          "vram_total": 4294967296,
+          "vram_free": 3808899072,
+          "torch_vram_total": 4294967296,
+          "torch_vram_free": 3808899072
+        }
+      ]
+    },
+    "queue_api": true,
+    "node_count": 969,
+    "stock_video_nodes": [
+      "CreateVideo",
+      "SaveVideo"
+    ],
+    "technical_prompt_id": "a5875a15-aa49-4253-aebc-2c520132245f",
+    "technical_graph_verified": true,
+    "artifact_bytes": 400
+  },
+  "agent": {
+    "opencode": {
+      "state": "available",
+      "live_verified": false,
+      "required_version": "2.0.17",
+      "reported_version": "2.0.17"
+    },
+    "max": {
+      "mode": "fake",
+      "token_configured": false,
+      "live_verified": false
+    },
+    "database": "sqlite",
+    "configuration": "valid",
+    "video": {
+      "state": "needs_configuration",
+      "backend": "comfyui",
+      "live_verified": false
+    }
+  },
+  "test_channel": {
+    "id": "test",
+    "name": "Нейровидео — тест MAX",
+    "created_in_previous_session": true,
+    "mode": "dry_run",
+    "paused": true,
+    "bot_connected": false
+  },
+  "limits": {
+    "ai_video_generation_verified": false,
+    "video_model_installed": false,
+    "workflow_registered": false,
+    "max_bot_publication_verified": false,
+    "production_accepted": false
+  }
+}

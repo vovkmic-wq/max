@@ -1,3 +1,4 @@
+# Проверка качества видео, сравнение кадров и сборка монтажа.
 """Bounded, cross-platform video QA, visual fingerprints and montage."""
 
 import subprocess
@@ -8,7 +9,9 @@ from .config import AgentError, inside
 from .media import inspect_video
 
 
+# Запускаем обработку медиа с ограниченным временем выполнения.
 def ffmpeg(args, timeout=120):
+    # Выполняем операцию с отдельной обработкой возможных ошибок.
     try:
         result = subprocess.run(
             [imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", *args],
@@ -16,15 +19,19 @@ def ffmpeg(args, timeout=120):
             timeout=timeout,
             check=False,
         )
+    # Обрабатываем (OSError, subprocess.TimeoutExpired) и выбираем допустимый исход.
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise AgentError("VIDEO_PROCESS_TIMEOUT") from exc
+    # Обрабатываем ветвь при условии: result.returncode.
     if result.returncode:
         raise AgentError("VIDEO_PROCESS_FAILED")
     return result
 
 
+# Извлекаем признаки кадров для поиска визуальных повторов.
 def frame_fingerprints(path, duration):
     hashes = []
+    # Последовательно обрабатываем элементы: (0.1, 0.5, 0.9).
     for fraction in (0.1, 0.5, 0.9):
         result = ffmpeg(
             [
@@ -43,11 +50,23 @@ def frame_fingerprints(path, duration):
             30,
         )
         frame = result.stdout
+        # Обрабатываем ветвь при условии: not frame.
+        if not frame:
+            # A short low-fps clip can end before the rounded duration's sample point.
+            # Scale before reversing so buffering the final frame stays small.
+            frame = ffmpeg(
+                ["-i", str(path), "-vf", "scale=9:8,format=rgb24,reverse",
+                 "-frames:v", "1", "-f", "rawvideo", "pipe:1"],
+                30,
+            ).stdout
+        # Обрабатываем ветвь при условии: len(frame) != 216.
         if len(frame) != 216:
             raise AgentError("VIDEO_FRAME_INVALID")
         gray = [sum(frame[i : i + 3]) // 3 for i in range(0, 216, 3)]
         bits = 0
+        # Последовательно обрабатываем элементы: range(8).
         for y in range(8):
+            # Последовательно обрабатываем элементы: range(8).
             for x in range(8):
                 bits = (bits << 1) | int(gray[y * 9 + x] > gray[y * 9 + x + 1])
         rgb = [sum(frame[channel::3]) // 72 for channel in range(3)]
@@ -55,6 +74,7 @@ def frame_fingerprints(path, duration):
     return hashes
 
 
+# Сопоставляем признаки изображений или кадров.
 def visually_similar(left, right, max_distance=6):
     return len(left) == len(right) == 3 and all(
         (int(a[:16], 16) ^ int(b[:16], 16)).bit_count() <= max_distance
@@ -63,6 +83,7 @@ def visually_similar(left, right, max_distance=6):
     )
 
 
+# Проверяем техническое качество перед допуском к публикации.
 def quality_check(root, relative, options=None):
     options = options or {}
     info = inspect_video(
@@ -87,13 +108,16 @@ def quality_check(root, relative, options=None):
     )
     log = decoded.stderr.decode("utf-8", errors="replace")
     flags = []
+    # Обрабатываем ветвь при условии: 'black_start:' in log.
     if "black_start:" in log:
         flags.append("BLACK_FRAMES_REVIEW")
+    # Обрабатываем ветвь при условии: 'freeze_start' in log.
     if "freeze_start" in log:
         flags.append("FROZEN_SCENE_REVIEW")
     streams = ffmpeg(["-i", str(path), "-map", "0:v:0", "-frames:v", "1", "-f", "null", "-"])
     output = streams.stderr.decode("utf-8", errors="replace")
     has_audio = "Audio:" in output
+    # Обрабатываем ветвь при условии: options.get('require_audio') and (not has_audio).
     if options.get("require_audio") and not has_audio:
         flags.append("MISSING_AUDIO_REVIEW")
     return {
@@ -105,13 +129,17 @@ def quality_check(root, relative, options=None):
     }
 
 
+# Создаём монтаж из проверенных локальных сцен.
 def render_montage(root, scene_paths, durations, output_relative, options=None):
     options = options or {}
+    # Обрабатываем ветвь при условии: not scene_paths or len(scene_paths) != len(durations) or len(scene_paths) > 12.
     if not scene_paths or len(scene_paths) != len(durations) or len(scene_paths) > 12:
         raise AgentError("SCENE_LIST_INVALID")
     width, height = options.get("width", 720), options.get("height", 1280)
+    # Обрабатываем ветвь при условии: width not in {160, 360, 720, 1080} or height not in {288, 640, 1280, 1920}.
     if width not in {160, 360, 720, 1080} or height not in {288, 640, 1280, 1920}:
         raise AgentError("RENDER_SIZE_INVALID")
+    # Обрабатываем ветвь при условии: any((not isinstance(d, (int, float)) or isinstance(d, bool) or (not 0 < d <= 60) for d in durations)) or su….
     if any(
         not isinstance(d, (int, float)) or isinstance(d, bool) or not 0 < d <= 60 for d in durations
     ) or sum(durations) > options.get("max_duration_seconds", 60):
@@ -122,9 +150,11 @@ def render_montage(root, scene_paths, durations, output_relative, options=None):
     work = target.parent / (target.stem + "-parts")
     work.mkdir(exist_ok=True)
     parts = []
+    # Последовательно обрабатываем элементы: enumerate(zip(scene_paths, durations, strict=True)).
     for index, (relative, duration) in enumerate(zip(scene_paths, durations, strict=True)):
         path = inside(root, relative)
         info = inspect_video(root, relative)
+        # Обрабатываем ветвь при условии: info['duration_seconds'] + 0.1 < duration.
         if info["duration_seconds"] + 0.1 < duration:
             raise AgentError("SCENE_TOO_SHORT")
         part = work / f"{index}.mp4"
@@ -164,6 +194,7 @@ def render_montage(root, scene_paths, durations, output_relative, options=None):
         )
         parts.append(part)
     args = ["-y"]
+    # Последовательно обрабатываем элементы: parts.
     for part in parts:
         args += ["-i", str(part)]
     labels = "".join(f"[{i}:v:0][{i}:a:0]" for i in range(len(parts)))

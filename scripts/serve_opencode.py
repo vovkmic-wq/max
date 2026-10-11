@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 
+# Разбираем параметры запуска и выбираем сценарий выполнения.
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", required=True)
@@ -27,13 +28,17 @@ def main():
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
 
+    # Операция stop: данного модуля.
     def stop(*_):
         child.terminate()
 
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
+    # Выполняем операцию с отдельной обработкой возможных ошибок.
     try:
+        # Последовательно обрабатываем элементы: child.stdout.
         for line in child.stdout:
+            # Обрабатываем ветвь при условии: line.startswith('server password ').
             if line.startswith("server password "):
                 access = runtime / "access.json"
                 access.write_text(
@@ -45,14 +50,17 @@ def main():
                     ),
                     encoding="utf-8",
                 )
+                # Обрабатываем ветвь при условии: os.name != 'nt'.
                 if os.name != "nt":
                     access.chmod(0o600)
                 print("OpenCode ready; local access saved privately.", flush=True)
             # All other output is suppressed: backend errors can contain sensitive headers.
         return child.wait()
     finally:
+        # Завершаем работу и освобождаем ресурсы независимо от результата.
         child.terminate()
 
 
+# Обрабатываем ветвь при условии: __name__ == '__main__'.
 if __name__ == "__main__":
     raise SystemExit(main())

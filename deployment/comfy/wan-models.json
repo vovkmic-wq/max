@@ -1,0 +1,37 @@
+{
+  "comfyui_version": "0.39.0",
+  "runtime": {
+    "repository": "https://github.com/leejet/stable-diffusion.cpp",
+    "commit": "a1ded76da5818803fca97a3b433669ef727d32cf",
+    "release": "master-945-a1ded76",
+    "archive": "sd-master-a1ded76-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
+    "sha256": "e65f3c4cf3a0c4c5aed5120ab449be7c883db6c70648bcc56ca55b246b9d8161",
+    "quantization": "q5_0"
+  },
+  "models": [
+    {
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+      "file": "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
+      "destination": "diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
+      "size": 2838303560,
+      "sha256": "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5"
+    },
+    {
+      "repo": "city96/umt5-xxl-encoder-gguf",
+      "revision": "b535255bee98c2b0a59ea7c0ae2dcd0c6657b3b7",
+      "file": "umt5-xxl-encoder-Q4_K_M.gguf",
+      "destination": "text_encoders/umt5-xxl-encoder-Q4_K_M.gguf",
+      "size": 3655145312,
+      "sha256": "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40"
+    },
+    {
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+      "file": "split_files/vae/wan_2.1_vae.safetensors",
+      "destination": "vae/wan_2.1_vae.safetensors",
+      "size": 253815318,
+      "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    }
+  ]
+}

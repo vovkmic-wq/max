@@ -11,6 +11,7 @@ from max_channel_agent.video_tools import ffmpeg
 root = Path(__file__).resolve().parents[1]
 demo = root / "data/hybrid-demo"
 demo.mkdir(parents=True, exist_ok=True)
+# Последовательно обрабатываем элементы: ('config', 'schemas', 'prompts').
 for folder in ("config", "schemas", "prompts"):
     shutil.copytree(
         root / folder,
@@ -26,7 +27,9 @@ app["max"]["adapter_mode"] = "fake"
 app["video"].update(width=160, height=288)
 (demo / "config/app.json").write_text(json.dumps(app), encoding="utf-8")
 service = build_service(demo)
+# Выполняем операцию с отдельной обработкой возможных ошибок.
 try:
+    # Последовательно обрабатываем элементы: enumerate(('blue', 'red')).
     for index, colour in enumerate(("blue", "red")):
         ffmpeg(
             [
@@ -52,6 +55,7 @@ try:
         ],
     }
     project = service.hybrid.create(read_topic(demo)["channels"][0]["id"], plan)
+    # Последовательно обрабатываем элементы: range(2).
     for index in range(2):
         service.hybrid.import_scene(project["id"], index, f"scene{index}.mp4", plan["rights_basis"])
     result = service.hybrid.assemble(project["id"], 1)
@@ -67,4 +71,5 @@ try:
         )
     )
 finally:
+    # Завершаем работу и освобождаем ресурсы независимо от результата.
     service.close()

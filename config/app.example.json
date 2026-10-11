@@ -34,7 +34,14 @@
     "webhook_secret_env": "MAX_WEBHOOK_SECRET",
     "webhook_enabled": false,
     "request_timeout_seconds": 30,
-    "max_messages_per_second_per_channel": 1
+    "max_messages_per_second_per_channel": 1,
+    "browser": {
+      "profile_dir": "data/max-browser",
+      "channel": "chrome",
+      "headless": true,
+      "operation_timeout_seconds": 120,
+      "channels": {}
+    }
   },
   "jobs": {
     "lease_seconds": 240,

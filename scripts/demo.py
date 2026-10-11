@@ -14,6 +14,7 @@ from max_channel_agent.db import Draft, Story, now
 root = Path(__file__).resolve().parents[1]
 demo = root / "data/demo"
 demo.mkdir(parents=True, exist_ok=True)
+# Последовательно обрабатываем элементы: ('schemas', 'prompts').
 for folder in ("schemas", "prompts"):
     shutil.copytree(root / folder, demo / folder, dirs_exist_ok=True)
 (demo / "config").mkdir(exist_ok=True)
@@ -33,6 +34,7 @@ source["rights"].update(
 (demo / "config/sources.json").write_text(json.dumps(sources))
 initialize(demo)
 service = build_service(demo)
+# Выполняем операцию с отдельной обработкой возможных ошибок.
 try:
     service.ingest(
         "example_rss",
@@ -47,10 +49,12 @@ try:
             )
         ],
     )
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with service.db.session() as session:
         story = session.scalar(select(Story))
         story_id = story.id
     did = service.edit_story("main", story_id)
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with service.db.session() as session:
         draft = session.get(Draft, did)
         print(
@@ -68,4 +72,5 @@ try:
             )
         )
 finally:
+    # Завершаем работу и освобождаем ресурсы независимо от результата.
     service.close()

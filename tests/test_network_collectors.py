@@ -9,10 +9,12 @@ from max_channel_agent.config import AgentError
 from max_channel_agent.network import SafeHTTP, canonical_url, validate_url
 
 
+# Операция resolver: данного модуля.
 def resolver(host, port, **kwargs):
     return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("93.184.216.34", port))]
 
 
+# Проверяем сценарий: ssrf literals.
 @pytest.mark.parametrize(
     "url",
     [
@@ -31,19 +33,25 @@ def resolver(host, port, **kwargs):
     ],
 )
 def test_ssrf_literals(url):
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with pytest.raises(AgentError):
         validate_url(url, resolve=False)
 
 
+# Проверяем сценарий: dns rebinding blocked.
 def test_dns_rebinding_blocked():
+    # Операция bad: данного модуля.
     def bad(host, port, **kwargs):
         return [(2, 1, 0, "", ("127.0.0.1", port))]
 
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with pytest.raises(AgentError):
         validate_url("https://public.example", resolver=bad)
 
 
+# Проверяем сценарий: pinned address and sni.
 def test_pinned_address_and_sni():
+    # Операция handle: данного модуля.
     def handle(request):
         assert request.url.host == "93.184.216.34"
         assert request.headers["host"] == "example.org"
@@ -55,6 +63,7 @@ def test_pinned_address_and_sni():
     with_http.close()
 
 
+# Проверяем сценарий: redirect private blocked.
 def test_redirect_private_blocked():
     client = SafeHTTP(
         transport=httpx.MockTransport(
@@ -62,47 +71,57 @@ def test_redirect_private_blocked():
         ),
         resolver=resolver,
     )
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with pytest.raises(AgentError, match="SOURCE_URL_FORBIDDEN"):
         client.get("https://example.org")
     client.close()
 
 
+# Проверяем сценарий: large response blocked.
 def test_large_response_blocked():
     client = SafeHTTP(
         max_bytes=3,
         transport=httpx.MockTransport(lambda r: httpx.Response(200, content=b"four")),
         resolver=resolver,
     )
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with pytest.raises(AgentError, match="SOURCE_TOO_LARGE"):
         client.get("https://example.org")
     client.close()
 
 
+# Проверяем сценарий: source errors stop.
 @pytest.mark.parametrize("status", [401, 403, 429, 500])
 def test_source_errors_stop(status):
     calls = []
 
+    # Операция handle: данного модуля.
     def handle(r):
         calls.append(r)
         return httpx.Response(status)
 
     client = SafeHTTP(transport=httpx.MockTransport(handle), resolver=resolver)
+    # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
     with pytest.raises(AgentError):
         client.get("https://example.org")
     assert len(calls) == 1
     client.close()
 
 
+# Проверяем сценарий: canonical preserves meaningful query.
 def test_canonical_preserves_meaningful_query():
     assert (
         canonical_url("https://EXAMPLE.org/article?id=2#part") == "https://example.org/article?id=2"
     )
 
 
+# Проверяем сценарий: rss and 304.
 def test_rss_and_304(service):
     rss = b'<rss version="2.0"><channel><title>Video</title><item><guid>x</guid><title>AI video</title><link>https://example.org/a</link><description>Short video</description><pubDate>Tue, 06 Oct 2026 00:00:00 GMT</pubDate></item></channel></rss>'
 
+    # Структура HTTP объединяет связанные данные и операции модуля.
     class HTTP:
+        # Получаем ответ с учётом сетевых и размерных ограничений.
         def get(self, *args):
             return 200, rss, {"etag": "v1"}, "https://example.org"
 
@@ -110,13 +129,16 @@ def test_rss_and_304(service):
     items, cursor = collect_web(source, {}, HTTP(), service.settings.root)
     assert len(items) == 1 and items[0].external_id == "x" and cursor["etag"] == "v1"
 
+    # Структура NotModified объединяет связанные данные и операции модуля.
     class NotModified:
+        # Получаем ответ с учётом сетевых и размерных ограничений.
         def get(self, *args):
             return 304, b"", {}, "https://example.org"
 
     assert collect_web(source, cursor, NotModified(), service.settings.root) == ([], cursor)
 
 
+# Проверяем сценарий: html profile.
 def test_html_profile(project, service):
     directory = project / "config/extraction"
     directory.mkdir()
@@ -129,7 +151,9 @@ def test_html_profile(project, service):
         "extraction_profile": "article",
     }
 
+    # Структура HTTP объединяет связанные данные и операции модуля.
     class HTTP:
+        # Получаем ответ с учётом сетевых и размерных ограничений.
         def get(self, *args):
             return (
                 200,

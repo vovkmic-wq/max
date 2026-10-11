@@ -9,6 +9,11 @@ data/
 .test-state/
 .env
 .env.local
+.env.*
+!.env.example
+*.enc
+*.key
+*.pem
 config/secrets.env
 config/opencode.private.json
 build/
@@ -17,4 +22,7 @@ dist/
 *.zip
 config/app.json
 config/sources.json
+config/image_sources.json
 config/comfy/workflow.json
+
+config/image_channels.json

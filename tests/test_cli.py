@@ -3,6 +3,7 @@ import json
 from max_channel_agent.cli import main
 
 
+# Проверяем сценарий: cli init is idempotent and secret safe.
 def test_cli_init_is_idempotent_and_secret_safe(project, capsys, monkeypatch):
     monkeypatch.setenv("APP_AUTH_SECRET", "fixture-owner")
     assert main(["--root", str(project), "init"]) == 0
@@ -11,11 +12,14 @@ def test_cli_init_is_idempotent_and_secret_safe(project, capsys, monkeypatch):
     assert main(["--root", str(project), "init"]) == 0
     assert secret_file.read_bytes() == before
     output = capsys.readouterr().out
+    # Последовательно обрабатываем элементы: before.decode().splitlines().
     for line in before.decode().splitlines():
+        # Обрабатываем ветвь при условии: '=' in line.
         if "=" in line:
             assert line.split("=", 1)[1] not in output
 
 
+# Проверяем сценарий: cli doctor and tick.
 def test_cli_doctor_and_tick(project, capsys):
     assert main(["--root", str(project), "doctor"]) == 0
     report = json.loads(capsys.readouterr().out)

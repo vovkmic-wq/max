@@ -1,3 +1,4 @@
+# Адаптеры внешних сервисов и безопасная обработка результатов отправки.
 """OpenCode stateless generation and explicit MAX delivery outcomes."""
 
 import json
@@ -11,18 +12,24 @@ import httpx
 from .config import AgentError, inside, parse_json
 
 
+# Извлекаем структурированный ответ и проверяем его формат.
 def extract_object(text):
     stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    # Выполняем операцию с отдельной обработкой возможных ошибок.
     try:
         value = parse_json(stripped)
+    # Обрабатываем AgentError и выбираем допустимый исход.
     except AgentError as exc:
         raise AgentError("INVALID_EDITOR_RESULT") from exc
+    # Обрабатываем ветвь при условии: not isinstance(value, dict).
     if not isinstance(value, dict):
         raise AgentError("INVALID_EDITOR_RESULT")
     return value
 
 
+# Структура OpenCode объединяет связанные данные и операции модуля.
 class OpenCode:
+    # Создаём объект и сохраняем зависимости для последующих операций.
     def __init__(self, settings, transport=None):
         self.options = settings.app["opencode"]
         self.mode = self.options["adapter_mode"]
@@ -31,8 +38,10 @@ class OpenCode:
         self.model = os.getenv(self.options["model_id_env"], self.options.get("model_id", ""))
         self.secret = os.getenv(self.options["auth_secret_env"], "")
         access_path = self.options.get("local_access_path")
+        # Обрабатываем ветвь при условии: access_path.
         if access_path:
             path = inside(self.root, access_path)
+            # Обрабатываем ветвь при условии: path.exists().
             if path.exists():
                 access = parse_json(path.read_text(encoding="utf-8"))
                 self.base_url = self.base_url or access["base_url"]
@@ -43,11 +52,15 @@ class OpenCode:
         )
         self.path = self.options.get("generate_path", "/api/experimental/generate")
 
+    # Операция probe: адаптеры внешних сервисов и безопасная обработка результатов отправки.
     def probe(self):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
             return {"state": "offline", "runtime": "fake", "live_verified": False}
+        # Обрабатываем ветвь при условии: not self.base_url.
         if not self.base_url:
             return {"state": "needs_configuration", "live_verified": False}
+        # Выполняем операцию с отдельной обработкой возможных ошибок.
         try:
             response = self.client.get(self.base_url + "/api/info", auth=self.auth)
             response.raise_for_status()
@@ -58,18 +71,24 @@ class OpenCode:
                 "required_version": self.options["required_version"],
                 "reported_version": info.get("version") if isinstance(info, dict) else None,
             }
+        # Обрабатываем (httpx.HTTPError, ValueError) и выбираем допустимый исход.
         except (httpx.HTTPError, ValueError):
             return {"state": "unavailable", "live_verified": False}
 
+    # Запрашиваем текст по заданным редакционным ограничениям.
     def generate_text(self, prompt):
+        # Обрабатываем ветвь при условии: self.mode != 'live' or not self.base_url.
         if self.mode != "live" or not self.base_url:
             raise AgentError("OPENCODE_NOT_CONFIGURED")
         payload = {"prompt": prompt}
+        # Обрабатываем ветвь при условии: self.model.
         if self.model:
             provider, model = self.model.split("/", 1)
             payload["model"] = {"providerID": provider, "id": model}
+        # Выполняем операцию с отдельной обработкой возможных ошибок.
         try:
             session_id = None
+            # Обрабатываем ветвь при условии: self.options.get('generate_transport') == 'session'.
             if self.options.get("generate_transport") == "session":
                 created = self.client.post(
                     self.base_url + "/api/session",
@@ -85,8 +104,10 @@ class OpenCode:
                 )
                 created.raise_for_status()
                 session_id = created.json().get("data", {}).get("id")
+                # Обрабатываем ветвь при условии: not session_id or not re.fullmatch('ses[a-zA-Z0-9_-]+', session_id).
                 if not session_id or not re.fullmatch(r"ses[a-zA-Z0-9_-]+", session_id):
                     raise AgentError("OPENCODE_SESSION_INVALID")
+            # Выполняем операцию с отдельной обработкой возможных ошибок.
             try:
                 path = f"/api/session/{session_id}/generate" if session_id else self.path
                 response = self.client.post(
@@ -95,7 +116,9 @@ class OpenCode:
                     auth=self.auth,
                 )
             finally:
+                # Обрабатываем ветвь при условии: session_id.
                 if session_id:
+                    # Выполняем операцию с отдельной обработкой возможных ошибок.
                     try:
                         self.client.post(
                             self.base_url + f"/api/session/{session_id}/interrupt",
@@ -105,26 +128,35 @@ class OpenCode:
                         self.client.delete(
                             self.base_url + f"/api/session/{session_id}", auth=self.auth, timeout=5
                         )
+                    # Обрабатываем httpx.HTTPError и выбираем допустимый исход.
                     except httpx.HTTPError:
                         pass
+            # Обрабатываем ветвь при условии: response.status_code in {401, 403}.
             if response.status_code in {401, 403}:
                 raise AgentError("OPENCODE_ACCESS_DENIED")
+            # Обрабатываем ветвь при условии: response.status_code == 503.
             if response.status_code == 503:
                 raise AgentError("OPENCODE_PROVIDER_UNAVAILABLE")
             response.raise_for_status()
             data = response.json()
             text = data.get("data", data).get("text", "")
+            # Обрабатываем ветвь при условии: not isinstance(text, str) or not text.strip().
             if not isinstance(text, str) or not text.strip():
                 raise AgentError("OPENCODE_EMPTY_RESPONSE")
             return text, data.get("usage", {})
+        # Обрабатываем (httpx.HTTPError, ValueError, TypeError) и выбираем допустимый исход.
         except (httpx.HTTPError, ValueError, TypeError) as exc:
             raise AgentError("OPENCODE_GENERATION_FAILED") from exc
 
+    # Операция run: адаптеры внешних сервисов и безопасная обработка результатов отправки.
     def run(self, task_type, context):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
+            # Обрабатываем ветвь при условии: task_type == 'draft'.
             if task_type == "draft":
                 material = context["materials"][0]
                 text = material["title"] + "\n\n" + material["text"]
+                # Обрабатываем ветвь при условии: material['url'].
                 if material["url"]:
                     text += "\n\nИсточник: " + material["url"]
                 return {
@@ -138,16 +170,22 @@ class OpenCode:
                     "confidence": 0,
                     "payload": {},
                 }, {}
+            # Обрабатываем ветвь при условии: task_type == 'cluster'.
             if task_type == "cluster":
                 return {"same_event": False}, {}
+            # Обрабатываем ветвь при условии: task_type == 'classify'.
             if task_type == "classify":
                 return {"relevance": 1, "decision": "review"}, {}
+            # Обрабатываем ветвь при условии: task_type == 'verify'.
             if task_type == "verify":
                 return {"verified": False, "issues": ["OFFLINE_FIXTURE"]}, {}
+            # Обрабатываем ветвь при условии: task_type == 'translate'.
             if task_type == "translate":
                 raise AgentError("OFFLINE_TRANSLATION_UNAVAILABLE")
+            # Обрабатываем ветвь при условии: task_type == 'video_plan'.
             if task_type == "video_plan":
                 raise AgentError("OFFLINE_STORYBOARD_UNAVAILABLE")
+            # Обрабатываем ветвь при условии: task_type == 'bootstrap'.
             if task_type == "bootstrap":
                 return {
                     "name": context["channel"]["name"],
@@ -170,11 +208,15 @@ class OpenCode:
         prompt = instruction + "\nFor this service task use this exact JSON shape:\n" + output
         prompt += "\nTask type: " + task_type + "\nUNTRUSTED MATERIALS AND TRUSTED CONFIG:\n"
         prompt += json.dumps(context, ensure_ascii=False)
+        # Последовательно обрабатываем элементы: range(self.options['max_format_repairs'] + 1).
         for attempt in range(self.options["max_format_repairs"] + 1):
             text, usage = self.generate_text(prompt)
+            # Выполняем операцию с отдельной обработкой возможных ошибок.
             try:
                 return extract_object(text), usage
+            # Обрабатываем AgentError и выбираем допустимый исход.
             except AgentError:
+                # Обрабатываем ветвь при условии: attempt == self.options['max_format_repairs'].
                 if attempt == self.options["max_format_repairs"]:
                     raise
                 # Do not send the failed output back; it may contain injection or invented secrets.
@@ -182,6 +224,7 @@ class OpenCode:
         raise AgentError("INVALID_EDITOR_RESULT")
 
 
+# Структура Delivery объединяет связанные данные и операции модуля.
 @dataclass
 class Delivery:
     state: str
@@ -190,7 +233,9 @@ class Delivery:
     retry_after: float = 0
 
 
+# Структура MaxAPI объединяет связанные данные и операции модуля.
 class MaxAPI:
+    # Создаём объект и сохраняем зависимости для последующих операций.
     def __init__(self, settings, transport=None):
         self.options = settings.app["max"]
         self.mode = self.options["adapter_mode"]
@@ -200,17 +245,23 @@ class MaxAPI:
             timeout=self.options["request_timeout_seconds"], trust_env=False, transport=transport
         )
 
+    # Проверяем запрос и обрабатываем безопасный результат транспорта.
     def request(self, method, path, **kwargs):
+        # Обрабатываем ветвь при условии: not self.token.
         if not self.token:
             raise AgentError("MAX_TOKEN_REQUIRED")
+        # Выполняем операцию с отдельной обработкой возможных ошибок.
         try:
             return self.client.request(
                 method, self.base_url + path, headers={"Authorization": self.token}, **kwargs
             )
+        # Обрабатываем httpx.HTTPError и выбираем допустимый исход.
         except httpx.HTTPError as exc:
             raise AgentError("MAX_TRANSPORT_UNKNOWN") from exc
 
+    # Проверяем доступность ресурса и его разрешённые свойства.
     def inspect(self, chat_id):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
             return {
                 "publish": True,
@@ -221,6 +272,7 @@ class MaxAPI:
                 "live_verified": False,
             }
         response = self.request("GET", f"/chats/{chat_id}/members/me")
+        # Обрабатываем ветвь при условии: response.status_code != 200.
         if response.status_code != 200:
             raise AgentError("MAX_CHANNEL_ACCESS_DENIED")
         membership = response.json()
@@ -235,49 +287,67 @@ class MaxAPI:
             "live_verified": True,
         }
 
+    # Выполняем отправку и возвращаем подтверждённый либо неопределённый результат.
     def publish(self, chat_id, text, attachment=None):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
             return Delivery("confirmed", "offline-" + str(uuid.uuid4()), None)
+        # Выполняем операцию с отдельной обработкой возможных ошибок.
         try:
             payload = {"text": text, "notify": True}
+            # Обрабатываем ветвь при условии: attachment.
             if attachment:
                 payload["attachments"] = [attachment]
             response = self.request("POST", "/messages", params={"chat_id": chat_id}, json=payload)
+            # Обрабатываем ветвь при условии: response.status_code == 400 and response.json().get('code') == 'attachment.not.ready'.
             if (
                 response.status_code == 400
                 and response.json().get("code") == "attachment.not.ready"
             ):
                 return Delivery("retry_wait", retry_after=30)
+            # Обрабатываем ветвь при условии: response.status_code in {401, 403, 400, 404}.
             if response.status_code in {401, 403, 400, 404}:
                 return Delivery("rejected")
+            # Обрабатываем ветвь при условии: response.status_code == 429.
             if response.status_code == 429:
+                # Выполняем операцию с отдельной обработкой возможных ошибок.
                 try:
                     delay = max(1, float(response.headers.get("Retry-After", "60")))
+                # Обрабатываем ValueError и выбираем допустимый исход.
                 except ValueError:
                     delay = 60
                 return Delivery("retry_wait", retry_after=delay)
+            # Обрабатываем ветвь при условии: response.status_code != 200.
             if response.status_code != 200:
                 return Delivery("unknown")
             message = response.json().get("message", {})
             mid = message.get("body", {}).get("mid")
+            # Обрабатываем ветвь при условии: not mid.
             if not mid:
                 return Delivery("unknown")
             return Delivery("confirmed", str(mid), message.get("url"))
+        # Обрабатываем (AgentError, ValueError, TypeError) и выбираем допустимый исход.
         except (AgentError, ValueError, TypeError):
             return Delivery("unknown")
 
+    # Операция messages: адаптеры внешних сервисов и безопасная обработка результатов отправки.
     def messages(self, chat_id, **params):
+        # Обрабатываем ветвь при условии: self.mode != 'live'.
         if self.mode != "live":
             return []
         response = self.request("GET", "/messages", params={"chat_id": chat_id, **params})
+        # Обрабатываем ветвь при условии: response.status_code != 200.
         if response.status_code != 200:
             raise AgentError("MAX_READ_FAILED")
         return response.json().get("messages", [])
 
+    # Подготавливаем проверенный ролик для выбранного адаптера.
     def upload_video(self, path):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
             return {"type": "video", "payload": {"token": "offline-video"}}
         response = self.request("POST", "/uploads", params={"type": "video"})
+        # Обрабатываем ветвь при условии: response.status_code != 200.
         if response.status_code != 200:
             raise AgentError("VIDEO_UPLOAD_UNAVAILABLE")
         data = response.json()
@@ -286,6 +356,7 @@ class MaxAPI:
         url = data.get("url", "")
         host, addresses = validate_url(url)
         original = httpx.URL(url)
+        # Удерживаем контекст ресурсов или транзакции до завершения этого блока.
         with path.open("rb") as stream:
             uploaded = self.client.post(
                 original.copy_with(host=addresses[0]),
@@ -293,14 +364,18 @@ class MaxAPI:
                 extensions={"sni_hostname": host},
                 files={"data": (path.name, stream, "video/mp4")},
             )
+        # Обрабатываем ветвь при условии: uploaded.status_code != 200.
         if uploaded.status_code != 200:
             raise AgentError("VIDEO_UPLOAD_UNCONFIRMED")
         token = data.get("token") or uploaded.json().get("token")
+        # Обрабатываем ветвь при условии: not token.
         if not token:
             raise AgentError("VIDEO_UPLOAD_UNCONFIRMED")
         return {"type": "video", "payload": {"token": token}}
 
+    # Операция correct: адаптеры внешних сервисов и безопасная обработка результатов отправки.
     def correct(self, message_id, text=None, remove=False):
+        # Обрабатываем ветвь при условии: self.mode == 'fake'.
         if self.mode == "fake":
             return True
         response = self.request(
@@ -309,9 +384,11 @@ class MaxAPI:
             params={"message_id": message_id},
             **({} if remove else {"json": {"text": text}}),
         )
+        # Обрабатываем ветвь при условии: response.status_code != 200 or response.json().get('success') is not True.
         if response.status_code != 200 or response.json().get("success") is not True:
             raise AgentError("MAX_CORRECTION_UNCONFIRMED")
         return True
 
+    # Освобождаем соединения и принадлежащие объекту ресурсы.
     def close(self):
         self.client.close()

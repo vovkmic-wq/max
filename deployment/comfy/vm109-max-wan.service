@@ -1,0 +1,28 @@
+[Unit]
+Description=Wan 2.1 video generation on VM 109 Vulkan
+After=network-online.target max-video-access.service
+Wants=network-online.target
+Requires=max-video-access.service
+
+[Service]
+User=maxvideo
+Group=maxvideo
+SupplementaryGroups=render
+WorkingDirectory=/opt/max-video/runtime
+Environment=LD_LIBRARY_PATH=/opt/max-video/runtime
+ExecStart=/opt/max-video/runtime/sd-server --diffusion-model /opt/max-video/models/quantized/wan21-q5_0.gguf --t5xxl /opt/max-video/models/text_encoders/umt5-xxl-encoder-Q4_K_M.gguf --vae /opt/max-video/models/vae/wan_2.1_vae.safetensors --backend diffusion=vulkan0,te=cpu,vae=cpu --params-backend cpu --max-vram 0.65 --mmap --listen-ip 10.20.30.95 --listen-port 8190 --steps 8 --cfg-scale 5 --flow-shift 3 --sampling-method euler --video-frames 9 --fps 8 -t 2
+Restart=on-failure
+RestartSec=15
+CPUQuota=200%
+MemoryHigh=7G
+MemoryMax=8G
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/max-video
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

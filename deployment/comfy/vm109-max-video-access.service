@@ -1,0 +1,11 @@
+[Unit]
+Description=Restrict VM 109 video API to ComfyUI container
+Before=max-wan.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/max-video-access.nft
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

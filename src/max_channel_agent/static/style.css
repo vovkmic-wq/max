@@ -1,1 +1,33 @@
-:root{font-family:system-ui,sans-serif;color:#e7edf8;background:#111827}body{margin:0}header,main{max-width:1050px;margin:auto;padding:28px}header span{color:#94b6ff}h1{font-size:36px}section{background:#1c273b;border:1px solid #334155;border-radius:14px;padding:22px;margin-bottom:20px}nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}label{display:inline-flex;flex-direction:column;gap:8px;margin:8px}input,button,textarea{font:inherit;border-radius:8px;border:1px solid #536582;padding:10px;background:#152037;color:inherit}button{cursor:pointer;background:#294e99;margin:5px}button:hover{background:#3864bd}textarea{width:95%;min-height:160px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;padding:14px;border-radius:10px}.card{border-top:1px solid #44516a;margin-top:16px;padding-top:12px}.badge{color:#a8c7ff}#status{color:#a8c7ff}
+/* Оформление элементов :root: внешний вид и расположение в панели. */
+:root {font-family:system-ui,sans-serif;color:#e7edf8;background:#111827}
+/* Оформление элементов body: внешний вид и расположение в панели. */
+body {margin:0}
+/* Оформление элементов header,main: внешний вид и расположение в панели. */
+header,main {max-width:1050px;margin:auto;padding:28px}
+/* Оформление элементов header span: внешний вид и расположение в панели. */
+header span {color:#94b6ff}
+/* Оформление элементов h1: внешний вид и расположение в панели. */
+h1 {font-size:36px}
+/* Оформление элементов section: внешний вид и расположение в панели. */
+section {background:#1c273b;border:1px solid #334155;border-radius:14px;padding:22px;margin-bottom:20px}
+/* Оформление элементов nav: внешний вид и расположение в панели. */
+nav {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+/* Оформление элементов label: внешний вид и расположение в панели. */
+label {display:inline-flex;flex-direction:column;gap:8px;margin:8px}
+/* Оформление элементов input,button,textarea: внешний вид и расположение в панели. */
+input,button,textarea {font:inherit;border-radius:8px;border:1px solid #536582;padding:10px;background:#152037;color:inherit}
+/* Оформление элементов button: внешний вид и расположение в панели. */
+button {cursor:pointer;background:#294e99;margin:5px}
+/* Оформление элементов button:hover: внешний вид и расположение в панели. */
+button:hover {background:#3864bd}
+/* Оформление элементов textarea: внешний вид и расположение в панели. */
+textarea {width:95%;min-height:160px}
+/* Оформление элементов pre: внешний вид и расположение в панели. */
+pre {white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;padding:14px;border-radius:10px}
+/* Оформление элементов .card: внешний вид и расположение в панели. */
+.card {border-top:1px solid #44516a;margin-top:16px;padding-top:12px}
+/* Оформление элементов .badge: внешний вид и расположение в панели. */
+.badge {color:#a8c7ff}
+/* Оформление элементов #status: внешний вид и расположение в панели. */
+#status {color:#a8c7ff}
+

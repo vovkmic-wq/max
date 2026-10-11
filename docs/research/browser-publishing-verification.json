@@ -1,0 +1,50 @@
+{
+  "checked_at": "2026-10-08T08:07:19.075611+03:00",
+  "transport": "browser",
+  "python_playwright_version": "1.63.0",
+  "dedicated_profile_created": true,
+  "live_login_saved": true,
+  "test_channel_access_verified": true,
+  "live_publication_verified": true,
+  "blocked_by": null,
+  "publication_approval_required": true,
+  "production_accepted": false,
+  "tests": {
+    "passed": 166,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 73.26,
+    "browser_cases": 24
+  },
+  "working_agent": {
+    "root": "C:/script/20261005-Max",
+    "url": "http://127.0.0.1:8080",
+    "mode": "browser",
+    "channels_paused": true
+  },
+  "account_clarification": "Project Chrome profile belongs to a different account than Codex IAB.",
+  "channel_creation": {
+    "state": "confirmed",
+    "name": "Нейровидео — тест MAX",
+    "chat_id": "-79860712657053",
+    "private": true,
+    "reload_verified": true,
+    "repeat_command_verified": true,
+    "initial_result": "unknown at post-creation setup screen; reconciled existing channel without another creation click",
+    "connected_profile": "test",
+    "evidence": "data/output/max-new-channel.png"
+  },
+  "live_text_publication": {
+    "state": "confirmed",
+    "chat_id": "-79860712657053",
+    "text": "Привет, это новый канал!",
+    "draft_id": "acac1c64-e9bd-40a8-9a25-493355320911",
+    "intent_id": "6792ac0a-35b4-4dff-8bb9-2aba8235fc90",
+    "external_id": "browser-6792ac0a-35b4-4dff-8bb9-2aba8235fc90",
+    "transport": "project BrowserMax",
+    "reload_verified": true,
+    "persisted_posts": 1,
+    "evidence": "data/output/max-greeting-published.png"
+  },
+  "live_video_publication_verified": false
+}

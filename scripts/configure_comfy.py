@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from max_channel_agent.config import AgentError, fingerprint, inside, parse_json
 
 
+# Разбираем параметры запуска и выбираем сценарий выполнения.
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -29,6 +30,7 @@ def main():
     args = parser.parse_args()
     root = args.root.resolve()
     parsed = urlsplit(args.url)
+    # Обрабатываем ветвь при условии: parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or pars….
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -39,6 +41,7 @@ def main():
     ):
         raise AgentError("GENERATOR_URL_INVALID")
     workflow = parse_json(inside(root, args.workflow).read_text(encoding="utf-8-sig"))
+    # Обрабатываем ветвь при условии: not isinstance(workflow, dict) or not workflow or any((not isinstance(n, dict) or 'class_type' not in n or ….
     if (
         not isinstance(workflow, dict)
         or not workflow
@@ -51,14 +54,18 @@ def main():
     ):
         raise AgentError("GENERATOR_WORKFLOW_INVALID")
     bindings = [{"node": args.positive_node, "input": args.positive_input, "value": "positive"}]
+    # Последовательно обрабатываем элементы: [(args.negative_node, 'text', 'negative'), (args.seed_node, args.seed_input, 'seed'), (args.frames_node, ar….
     for node, field, value in [
         (args.negative_node, "text", "negative"),
         (args.seed_node, args.seed_input, "seed"),
         (args.frames_node, args.frames_input, "frames"),
     ]:
+        # Обрабатываем ветвь при условии: node.
         if node:
             bindings.append({"node": node, "input": field, "value": value})
+    # Последовательно обрабатываем элементы: bindings.
     for binding in bindings:
+        # Обрабатываем ветвь при условии: binding['node'] not in workflow or binding['input'] not in workflow[binding['node']]['inputs'].
         if (
             binding["node"] not in workflow
             or binding["input"] not in workflow[binding["node"]]["inputs"]
@@ -92,9 +99,12 @@ def main():
     )
 
 
+# Обрабатываем ветвь при условии: __name__ == '__main__'.
 if __name__ == "__main__":
+    # Выполняем операцию с отдельной обработкой возможных ошибок.
     try:
         main()
+    # Обрабатываем AgentError и выбираем допустимый исход.
     except AgentError as exc:
         print(json.dumps({"code": exc.code}))
         raise SystemExit(1) from None

@@ -14,12 +14,14 @@ from max_channel_agent.service import Service
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# Операция project: данного модуля.
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     shutil.copytree(ROOT / "schemas", tmp_path / "schemas")
     shutil.copytree(ROOT / "prompts", tmp_path / "prompts")
     (tmp_path / "config").mkdir()
+    shutil.copy2(ROOT / "config/image_sources.example.json", tmp_path / "config/image_sources.example.json")
     app = json.loads((ROOT / "config/app.example.json").read_text(encoding="utf-8-sig"))
     (tmp_path / "config/app.json").write_text(json.dumps(app))
     topic = read_topic(ROOT)
@@ -50,6 +52,7 @@ def project(tmp_path, monkeypatch):
     return tmp_path
 
 
+# Операция write_topic: данного модуля.
 def write_topic(root, topic):
     (root / "TOPIC.md").write_text(
         "<!-- TOPIC_CONFIG_BEGIN -->\n```json\n"
@@ -59,6 +62,7 @@ def write_topic(root, topic):
     )
 
 
+# Операция service: данного модуля.
 @pytest.fixture
 def service(project):
     settings = Settings.load(project)
@@ -70,6 +74,7 @@ def service(project):
     service.close()
 
 
+# Операция clip: данного модуля.
 @pytest.fixture
 def clip(project):
     path = project / "fixture.mp4"
